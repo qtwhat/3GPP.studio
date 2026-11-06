@@ -1,0 +1,54 @@
+:root{
+  /* ---------- primitives (do not use directly in components) ---------- */
+  --s3-sand-50:#FAF9F5;  --s3-white:#FFFFFF;  --s3-sand-100:#F0EEE6;  --s3-sand-200:#E6E3DA;
+  --s3-stone-500:#87867F; --s3-stone-600:#66655F; --s3-stone-800:#3D3D3A; --s3-stone-950:#141413;
+  --s3-clay-400:#D97757;  --s3-clay-500:#B85C3E;  --s3-clay-700:#9E4A2F;
+
+  /* ---------- semantic color ---------- */
+  --s3-bg-page:var(--s3-sand-50);
+  --s3-bg-surface:var(--s3-white);
+  --s3-bg-subtle:var(--s3-sand-100);      /* preparing badge, placeholder art, pressed chip */
+  --s3-bg-inverse:var(--s3-stone-950);    /* selected chip, primary button */
+  --s3-text-strong:var(--s3-stone-950);   /* headings, titles, input text */
+  --s3-text:var(--s3-stone-800);          /* body */
+  --s3-text-muted:var(--s3-stone-600);    /* counts, placeholders, meta, footer */
+  --s3-text-inverse:var(--s3-white);
+  --s3-text-accent:var(--s3-clay-700);    /* playable badge, CTA, text links */
+  --s3-border-subtle:var(--s3-sand-200);  /* cards, dividers, header/footer rules */
+  --s3-border-control:var(--s3-stone-500);/* search field, checkbox, chip hover */
+  --s3-border-accent:var(--s3-clay-500);  /* playable badge, live-card hover */
+  --s3-focus:var(--s3-clay-500);
+  --s3-brand-mark:var(--s3-clay-400);     /* the "." in the wordmark only */
+
+  /* ---------- type ---------- */
+  --s3-font-sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --s3-font-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --s3-text-xs:12px;  --s3-leading-xs:16px;   /* badges, mono meta, placeholder caption */
+  --s3-text-sm:14px;  --s3-leading-sm:20px;   /* chips, counts, footer, lab bar, legend */
+  --s3-text-md:16px;  --s3-leading-md:24px;   /* body, summaries, search input */
+  --s3-text-lg:18px;  --s3-leading-lg:24px;   /* card title */
+  --s3-text-xl:24px;  --s3-leading-xl:30px;   /* mobile H1, empty-state title, placeholder mark */
+  --s3-text-2xl:32px; --s3-leading-2xl:38px;  /* desktop H1 */
+  --s3-weight-regular:400; --s3-weight-semibold:600;
+  --s3-tracking-tight:-0.01em;                /* H1 and wordmark only */
+
+  /* ---------- space (4-pt) ---------- */
+  --s3-space-1:4px; --s3-space-2:8px; --s3-space-3:12px; --s3-space-4:16px;
+  --s3-space-5:24px; --s3-space-6:32px; --s3-space-7:48px; --s3-space-8:64px;
+
+  /* ---------- layout ---------- */
+  --s3-page-max:1248px;      /* includes gutters → 1200px content */
+  --s3-gutter:24px;
+  --s3-grid-gap:24px;
+  --s3-measure:68ch;         /* intro paragraph, footer text, popover */
+  --s3-control-h:44px;       /* chips, buttons, checkbox row, lab bar targets */
+  --s3-control-h-lg:48px;    /* search field */
+
+  /* ---------- shape, elevation, motion, focus ---------- */
+  --s3-radius-sm:4px;  --s3-radius-md:8px;  --s3-radius-pill:999px;
+  --s3-border-w:1px;
+  --s3-shadow-popover:0 8px 24px rgb(20 20 19 / .08);   /* only shadow in the system */
+  --s3-duration:120ms; --s3-ease:cubic-bezier(.2,0,0,1);
+  --s3-focus-w:2px; --s3-focus-offset:2px;
+}
+@media (max-width:639px){ :root{ --s3-gutter:16px; --s3-grid-gap:16px; } }

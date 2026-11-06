@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Beam Failure Recovery (BFR) · 3gpp.studio</title>
+<meta name="description" content="Paint beam failure instances on a timeline, watch the counter and its timer decide detection, then see which conditions a SpCell recovery must pass.">
+<link rel="stylesheet" href="../../assets/tokens.css">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/explain/shell.css">
+<link rel="stylesheet" href="bfr.css">
+<script type="module" src="app.mjs"></script>
+</head>
+<body>
+<nav class="x-nav" aria-label="Experiment navigation"><a id="back" href="../../index.html">← All experiments</a><strong>BFR</strong><span class="note">Teaching model · TS 38.321 / 38.213 / 38.331 V19.3.0</span></nav>
+<main class="x-main">
+<header class="x-intro">
+<p class="eyebrow">MAC / L1 · TS 38.321 §5.17, §5.1 · TS 38.213 §6</p>
+<h1>Beam Failure Recovery: detection is a counter, recovery is a chain</h1>
+<p>Click the timeline to mark when the lower layer reports a <strong>beam failure instance</strong>. A counter with a timer decides whether beam failure is <strong>detected</strong>. Only then does the UE try to <strong>recover</strong>, and recovery counts only when every gate below passes.</p>
+</header>
+
+<div class="x-presets" id="presets" role="group" aria-label="Example scenarios"><span>Try:</span></div>
+
+<section class="x-card bfr" aria-labelledby="det-h">
+  <div class="bfr-head">
+    <h2 class="x-label" id="det-h">1 · Detection on the active SpCell</h2>
+    <div class="bfr-params">
+      <div class="x-field"><label for="pbfd">beamFailureDetectionTimer <output id="pbfd-o"></output></label><input type="range" id="pbfd" min="0" max="7" step="1"></div>
+      <div class="x-field"><label for="maxc">beamFailureInstanceMaxCount <output id="maxc-o"></output></label><input type="range" id="maxc" min="0" max="7" step="1"></div>
+    </div>
+  </div>
+  <p class="bfr-verdict" id="verdict" aria-live="polite"></p>
+  <p class="tl-cue" aria-hidden="true">Swipe or scroll sideways to see the full 0–320 ms →</p>
+  <div class="tl-scroll" tabindex="0" role="region" aria-label="Detection timeline, 0 to 320 ms; scrollable on narrow screens">
+    <div class="tl" id="timeline">
+      <div class="lane"><div class="lane-h">Lower-layer beam failure instance (BFI) <span>click a slot to toggle</span></div><div class="slots" id="slots"></div></div>
+      <div class="lane"><div class="lane-h">beamFailureDetectionTimer <span id="t-len"></span></div><div class="timers" id="timers"></div></div>
+      <div class="lane"><div class="lane-h">BFI_COUNTER</div><div class="counter" id="counter"></div></div>
+      <div class="axis" id="axis"></div>
+      <div class="marks" id="marks" aria-hidden="true"></div>
+    </div>
+  </div>
+  <p class="x-hint">A BFI means that <em>all</em> monitored beam-failure-detection RSs (set q0) were worse than Q<sub>out,LR</sub> in that reporting period (TS 38.213 §6). The slots are a conceptual input to that lower-layer outcome, not an RSRP trace. There is no “good” indication that clears the counter: only timer expiry, reconfiguration or a successful recovery resets it. The reporting period here is an illustrative 20 ms.</p>
+</section>
+
+<section class="x-card bfr bfr-rec" aria-labelledby="rec-h">
+  <div class="bfr-head">
+    <h2 class="x-label" id="rec-h">2 · Recovery: random access on the SpCell (dedicated BFR resources)</h2>
+  </div>
+  <div class="rec-grid">
+    <div class="rec-params">
+      <div class="x-field"><label for="rsrp">Best candidate SSB, SS-RSRP <output id="rsrp-o"></output></label><input type="range" id="rsrp" min="-120" max="-80" step="1"><p class="x-hint">Must be <em>above</em> rsrp-ThresholdSSB, here an illustrative −100 dBm.</p></div>
+      <div class="x-field"><fieldset><legend>Contention-free BFR preambles configured</legend><div class="x-seg" id="cfra"><button data-v="1">Yes</button><button data-v="0">No</button></div></fieldset></div>
+      <div class="x-field"><fieldset><legend>beamFailureRecoveryTimer</legend><div class="x-seg x-seg-wrap" id="rectimer"><button data-v="running">Running</button><button data-v="none">Not configured</button><button data-v="expired">Expired</button></div></fieldset><p class="x-hint">Starts when this random access begins. “Expired” stands for a later selection after it ran out.</p></div>
+      <div class="x-field"><fieldset><legend>gNB answers on recoverySearchSpace</legend><div class="x-seg" id="resp"><button data-v="1">In the window</button><button data-v="0">Missed</button></div></fieldset></div>
+    </div>
+    <ol class="gates" id="gates" aria-label="Recovery gates"></ol>
+  </div>
+</section>
+
+<section class="x-details">
+<h2>What to take away</h2>
+<p><strong>Detection is not “N bad samples in a row”.</strong> Each BFI restarts the timer and adds one to the counter. A quiet period does not clear the counter unless it lasts long enough for the timer to expire. BFIs at 20, 40, 80 and 100 ms reach a count of 4 even though 60 ms was quiet.</p>
+<p><strong>Counterexample.</strong> BFIs at 20 and 40 ms, then silence. The timer, restarted at 40 ms with 80 ms to run, expires at 120 ms and resets the counter. A BFI at 160 ms starts again from 1.</p>
+<p><strong>Detection ≠ recovery.</strong> Reaching the max count only <em>starts</em> random access on the SpCell. Finding a candidate beam, or sending the preamble, is not recovery. Recovery is complete when a PDCCH addressed to the UE's C-RNTI arrives on recoverySearchSpace within ra-ResponseWindow. That success sets BFI_COUNTER to 0 and stops beamFailureRecoveryTimer, the recovery timer, not the detection timer. Detection-timer expiry is a separate way the counter resets.</p>
+<p><strong>Failure at a gate is not RLF.</strong> If the dedicated resources are not eligible, MAC carries on with other random-access resource selection, such as contention-based RA. A missed response leads to the normal retry handling. Neither one is, by itself, radio link failure, and BFR is not handover: the UE stays on the same SpCell.</p>
+<details><summary>Model scope and limits</summary>
+<p>Baseline: one active SpCell, non-DRX, one BFD-RS set and a 4-step RA. Only the dedicated contention-free BFR branch is simulated. Contention-based fallback, preamble retransmission, power ramping, back-off, SCell BFR (which uses a BFR MAC CE and SR, not this PRACH path), PSCell with a deactivated SCG, two-TRP BFD-RS sets and NTN are named but not modelled. The 20 ms period, the −100 dBm threshold and the recovery timing (preamble +6 ms, window +10 to +30 ms, response +18 ms after detection) are illustrative inputs, not normative latencies.</p>
+<p>After detection the BFI row is frozen. Later BFIs, the later run of beamFailureDetectionTimer and any counter reset by its expiry are not simulated. The only post-detection counter change drawn is the reset on successful recovery, and the timer is drawn faded. <strong>Tie convention:</strong> if a BFI lands exactly on the timer deadline, this model counts the BFI first, which restarts the timer. So pbfd<i>N</i> tolerates up to <i>N</i>−1 quiet periods. The specification text does not order these two events. Ties are marked on the timeline.</p>
+<p>Candidate selection: the MAC selects <em>an</em> eligible candidate above the threshold, not necessarily the strongest. The page shows one candidate value for clarity. The BFI criterion (Q<sub>out,LR</sub>, a hypothetical PDCCH BLER) differs from the candidate criterion (L1-RSRP against a threshold).</p></details>
+<details><summary>Parameters (TS 38.331 V19.3.0)</summary>
+<table><tr><th>Parameter</th><th>IE</th><th>Values</th></tr>
+<tr><td>beamFailureDetectionTimer</td><td>RadioLinkMonitoringConfig</td><td>pbfd1…6, 8, 10 (in Q<sub>out,LR</sub> reporting periods)</td></tr>
+<tr><td>beamFailureInstanceMaxCount</td><td>RadioLinkMonitoringConfig</td><td>n1…6, 8, 10</td></tr>
+<tr><td>beamFailureRecoveryTimer</td><td>BeamFailureRecoveryConfig</td><td>ms10, 20, 40, 60, 80, 100, 150, 200; optional</td></tr>
+<tr><td>rsrp-ThresholdSSB, candidateBeamRSList, recoverySearchSpaceId, ra-ResponseWindow</td><td>BeamFailureRecoveryConfig</td><td>configured per UL BWP</td></tr></table></details>
+<details><summary>Sources and version</summary>
+<p>3GPP TS 38.321 V19.3.0 §5.17 (beam failure detection and recovery), §5.1.1 (recovery timer start), §5.1.2 (BFR CFRA resource selection) and §5.1.4 (response on recoverySearchSpace). TS 38.213 V19.3.0 §6 (link recovery procedures). TS 38.331 V19.3.0 (RadioLinkMonitoringConfig, BeamFailureRecoveryConfig). <a href="https://www.etsi.org/deliver/etsi_ts/138300_138399/138321/">Specification archive</a> · <a href="notes.md">Model notes</a></p></details>
+</section>
+<noscript><p>JavaScript is required for the interactive timeline. The text above explains the default scenario and the counterexample.</p></noscript>
+</main>
+</body>
+</html>

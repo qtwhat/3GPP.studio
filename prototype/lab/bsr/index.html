@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Buffer Status Reporting (BSR) · 3gpp.studio</title>
+<meta name="description" content="What the UE has versus what the gNB knows: LCG aggregation, Short/Long BSR, quantized ranges and staleness, step by step.">
+<link rel="stylesheet" href="../../assets/tokens.css">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/explain/shell.css">
+<link rel="stylesheet" href="bsr.css">
+<script type="module" src="app.mjs"></script>
+</head>
+<body>
+<nav class="x-nav" aria-label="Experiment navigation"><a id="back" href="../../index.html">← All experiments</a><strong>BSR</strong><span class="note">Teaching model · TS 38.321 V19.3.0</span></nav>
+<main class="x-main">
+<header class="x-intro">
+<p class="eyebrow">MAC · TS 38.321 §5.4.5, §6.1.3.1</p>
+<h1>Buffer Status Reporting: what the gNB actually knows</h1>
+<p>The UE knows its queued bytes exactly. The gNB only gets a <strong>range per logical channel group</strong>, and that range is <strong>from an earlier moment</strong>. Step through five moments and watch the gap between the two.</p>
+</header>
+
+<div class="x-presets" id="presets" role="group" aria-label="Example scenarios"><span>Try:</span></div>
+
+<section class="x-card bsr" aria-label="BSR explanation">
+  <ol class="bsr-steps" id="steps" aria-label="Moments"></ol>
+  <p class="bsr-story" id="story" aria-live="polite"></p>
+  <div class="bsr-grid">
+    <div class="bsr-ue">
+      <p class="x-label">Inside the UE · exact bytes</p>
+      <div id="ue"></div>
+    </div>
+    <div class="bsr-air">
+      <p class="x-label" id="air-h">On the air</p>
+      <div id="air"></div>
+    </div>
+  </div>
+  <div class="bsr-gnb">
+    <p class="x-label">What the gNB knows · reported range per group (log scale)</p>
+    <div id="gnb"></div>
+  </div>
+  <div class="bsr-nav"><button class="btn-text" id="prev">← Previous</button><button class="btn-primary" id="next">Next moment →</button></div>
+</section>
+
+<section class="x-card bsr-controls" aria-labelledby="ctl-h">
+  <h2 class="x-label" id="ctl-h">Change the example</h2>
+  <div class="x-inputs">
+    <div class="x-field"><fieldset><legend>Logical channel groups</legend><div class="x-seg" id="grouping"><button data-v="shared">A, B share LCG 0</button><button data-v="separate">A→LCG 0, B→LCG 1</button></div></fieldset></div>
+    <div class="x-field"><label for="a">LC A arrives <output id="a-o"></output></label><input type="range" id="a" min="100" max="4000" step="50"></div>
+    <div class="x-field"><label for="b">LC B arrives <output id="b-o"></output></label><input type="range" id="b" min="0" max="4000" step="50"></div>
+    <div class="x-field"><label for="served">Payload served by the grant <output id="served-o"></output></label><input type="range" id="served" min="0" max="1500" step="50"><p class="x-hint">Taken from A first, then B (a constructed order, not full LCP).</p></div>
+    <div class="x-field"><label for="extra">Later arrival on A <output id="extra-o"></output></label><input type="range" id="extra" min="0" max="2000" step="50"></div>
+  </div>
+</section>
+
+<section class="x-details">
+<h2>What to take away</h2>
+<p><strong>Aggregation.</strong> The report is per LCG, not per logical channel. When A and B share LCG 0, the gNB only sees their sum. Separate groups give separate fields. A Long BSR is used only when more than one LCG has data when the PDU is built, so configuring two groups alone does not force Long.</p>
+<p><strong>Quantization.</strong> Each field is an index into a table of ranges. The ranges grow with size, roughly geometrically, so on the log ruler they look about the same width, while the absolute uncertainty for a large buffer is thousands of bytes. Long BSR uses an 8-bit index with finer steps than Short BSR's 5-bit index.</p>
+<p><strong>Two different times.</strong> The format is chosen from groups that have data <em>when the PDU is to be built</em>. The field values are what remains <em>after</em> the PDU is assembled. A group can therefore appear in a Long BSR with index 0. Try <em>Drain one group</em>.</p>
+<p><strong>Staleness.</strong> A report is a snapshot. New data changes the UE's queue right away, but the gNB's knowledge only changes when another BSR is received. Being out of date and being out of range are different things. A small change can stay inside the old range, so the report is out of date even though it still looks correct. Try <em>Change within one range</em>.</p>
+<details><summary>Worked example (the default scenario)</summary>
+<p>A = 1,200 B and B = 800 B arrive. A grant carries 600 B of payload from A, which leaves A = 600 B and B = 800 B.</p>
+<table><tr><th>Grouping</th><th>Format</th><th>Field(s)</th><th>Meaning</th></tr>
+<tr><td>Shared LCG 0</td><td>Short (1 octet)</td><td>index 16</td><td>1,038 &lt; BS ≤ 1,446 B (holds 1,400)</td></tr>
+<tr><td>Separate</td><td>Long (3 octets)</td><td>LCG 0: index 66<br>LCG 1: index 70</td><td>597 &lt; BS ≤ 635 (600)<br>767 &lt; BS ≤ 817 (800)</td></tr></table>
+<p>Then 500 B arrive on A. In the shared case the UE holds 1,900 B, but the gNB still has (1,038, 1,446]. The next Short BSR reports index 17, which is 1,446 &lt; BS ≤ 2,014.</p></details>
+<details><summary>SR, BSR and grants are three different things</summary>
+<p><strong>SR</strong> (scheduling request) asks for an uplink opportunity and carries no byte count. <strong>BSR</strong> is a MAC CE carrying quantized data volume per LCG. A <strong>grant</strong> gives transmission resources, and its size is the scheduler's decision. A BSR informs that decision but does not allocate anything.</p>
+<p>Triggers (TS 38.321 §5.4.5): a <em>Regular BSR</em> fires when data becomes available while all buffers of the relevant LCGs were empty, or for a logical channel with higher priority than any buffered one, or when retxBSR-Timer expires with data. <em>Periodic BSR</em> fires on periodicBSR-Timer expiry. <em>Padding BSR</em> fires when padding in an allocation is large enough. A pending Regular BSR can trigger an SR when no usable UL-SCH resource exists.</p></details>
+<details><summary>Model scope and limits</summary>
+<p>Ordinary NR, two logical channels and up to two LCGs, with no IAB and no additionalBS-TableAllowed. Byte inputs already count as BSR-accounted volume. The service slider is the payload left after control and headers, not the TBS. Timers, Padding, Truncated, Refined and Extended BSR, HARQ, real scheduler behaviour and SR timing are not simulated. Step 5 assumes a later reporting opportunity, such as a periodic BSR, with no further service. MAC CE sizes exclude the MAC subheader. A Short BSR with every group empty is drawn as LCG 0, index 0. Ranges use the exact TS tables rather than a formula.</p></details>
+<details><summary>Sources and version</summary>
+<p>3GPP TS 38.321 V19.3.0: §5.4.5 (Buffer Status Reporting), §6.1.3.1 (BSR MAC CEs), Table 6.1.3.1-1 (5-bit) and Table 6.1.3.1-2 (8-bit). <a href="https://www.etsi.org/deliver/etsi_ts/138300_138399/138321/">Specification archive</a> · <a href="notes.md">Model notes</a></p></details>
+</section>
+<noscript><p>JavaScript is required for the interactive figure. The worked example above explains the default scenario.</p></noscript>
+</main>
+</body>
+</html>

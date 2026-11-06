@@ -1,0 +1,35 @@
+<!-- S3 navigation adapter: the original experiment follows unchanged. -->
+<style>
+/* Isolated adapter; mirrors tokens.css v1. Update together. */
+.s3bar,.s3bar *{box-sizing:border-box;font-family:ui-sans-serif,-apple-system,"Segoe UI",Arial,sans-serif;font-style:normal;letter-spacing:normal}
+.s3bar{height:48px;background:#fff;border-bottom:1px solid #E6E3DA;display:flex;align-items:center;gap:20px;padding:0 24px;position:relative;z-index:20;font-size:14px;line-height:1.5;color:#3D3D3A}
+.s3bar a{color:#3D3D3A;text-decoration:none;min-height:44px;display:inline-flex;align-items:center;white-space:nowrap}.s3bar a:hover{text-decoration:underline;text-underline-offset:4px}.s3bar-title{font-size:14px;line-height:1.5;font-weight:600;color:#141413;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.s3bar-note{margin-left:auto;font-size:12px;white-space:nowrap}.s3bar details{position:relative;flex:none;margin-left:0}.s3bar summary{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;cursor:pointer;list-style:none;font-size:14px}.s3bar summary::-webkit-details-marker{display:none}.s3bar-panel{position:absolute;right:0;top:44px;width:min(360px,calc(100vw - 32px));background:#fff;border:1px solid #E6E3DA;border-radius:8px;padding:16px;color:#3D3D3A;font-size:14px;line-height:1.65;box-shadow:0 8px 24px #14141314}.s3bar-panel ul{margin:0;padding-left:20px}.s3bar-panel p{font-size:13px;margin:12px 0 0}.s3bar-mobile{display:none}.s3bar :focus-visible{outline:2px solid #B85C3E;outline-offset:-2px}
+@media(max-width:639px){.s3bar{height:44px;padding:0 16px;gap:12px}.s3bar-desktop,.s3bar-note{display:none}.s3bar-mobile{display:inline}.s3bar-title{flex:1}.s3bar details{margin-left:0}.s3bar-panel{top:44px}}
+</style>
+<nav class="s3bar" aria-label="Experiment navigation" lang="en">
+  <a id="s3bar-back" href="../../index.html"><span class="s3bar-desktop">← All experiments</span><span class="s3bar-mobile">← All</span></a>
+  <span class="s3bar-title"><span class="s3bar-desktop">Logical Channel Prioritization (LCP)</span><span class="s3bar-mobile">LCP</span></span>
+  <span class="s3bar-note">Teaching model · under review</span>
+  <details id="s3bar-help"><summary>Help <span aria-hidden="true">⌄</span></summary><div class="s3bar-panel">
+    <strong class="s3bar-mobile">Teaching model · under review</strong>
+    <p>Click the illustration to pause or resume. A paused run resumes on its own after about 12 seconds.</p>
+    <p>With the illustration focused, ← and → step one grant; Home returns to the start.</p>
+    <p>Change grant sizes, priority, PBR or BSD in the table below; results recompute immediately. reset restores the defaults.</p>
+    <p>Simplified teaching model; technical review in progress. One grant every 10 ms, MAC and RLC headers ignored, 40 grants simulated.</p>
+  </div></details>
+</nav>
+<script>
+(()=>{
+const allowed=new Set(['measurement','scheduling','power','security','beam']);
+const raw=new URLSearchParams(location.search).get('from')||'';
+const input=new URLSearchParams(raw.slice(0,2000)),clean=new URLSearchParams();
+const q=(input.get('q')||'').slice(0,300).trim();if(q)clean.set('q',q);
+const topics=[...new Set((input.get('topic')||'').split(',').filter(x=>allowed.has(x)))];if(topics.length)clean.set('topic',topics.join(','));
+if(input.get('live')==='1')clean.set('live','1');
+document.getElementById('s3bar-back').href=(location.pathname.endsWith('design-system.html')?'index.html':'../../index.html')+(clean.size?'?'+clean.toString():'');
+const help=document.getElementById('s3bar-help');
+help.addEventListener('keydown',e=>{if(e.key==='Escape'){help.open=false;help.querySelector('summary').focus();}});
+document.addEventListener('click',e=>{if(!help.contains(e.target))help.open=false;});
+})();
+</script>
+<!-- /S3 navigation adapter -->

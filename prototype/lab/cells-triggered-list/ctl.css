@@ -1,0 +1,162 @@
+/* cellsTriggeredList page: one SVG timeline split into five numbered stage panels on a shared time axis,
+   then state, report and log panels.
+   Cell colours were checked with the dataviz palette validator (light mode, all six checks pass).
+   Identity is also carried by labels, marker shape (A circle, B square) and line style (B dashed). */
+.ctl,.ctl-below{--ca:#2E6E9E;--cb:#B9842A;--th:var(--s3-clay-700)}
+.ctl{margin-bottom:var(--s3-space-5)}
+.ctl-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--s3-space-2) var(--s3-space-5);margin-bottom:var(--s3-space-3)}
+.ctl-head h2{margin:0}
+.ctl-verdict{margin:0;font-size:var(--s3-text-md);color:var(--s3-text-strong)}
+/* Settings bar: one compact sticky row of value buttons; each group opens a popover with its controls and explanation. */
+.ctl-bar-wrap{position:sticky;top:0;z-index:5;margin:0 calc(-1 * var(--s3-space-5)) var(--s3-space-3);padding:var(--s3-space-2) var(--s3-space-5);background:var(--s3-bg-surface);border-bottom:1px solid var(--s3-border-subtle)}
+.ctl-bar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--s3-space-2) var(--s3-space-4)}
+.bar-g{display:flex;flex-direction:column;gap:2px;flex:none} /* never shrink: in the scrolling mobile bar a shrunken group let its label overlap the next one */
+.bar-g+.bar-g{padding-left:var(--s3-space-4);border-left:1px solid var(--s3-border-subtle)}
+.bar-l{font:var(--s3-weight-semibold) 11px/14px var(--s3-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--s3-text-muted);white-space:nowrap}
+.bar-l i{font-style:normal;font-weight:var(--s3-weight-regular);text-transform:none;letter-spacing:0}
+.bar-pills{display:flex;gap:6px}
+.bar-seg{margin-top:0}
+.bar-seg button{min-height:32px}
+.pill{min-height:32px;padding:0 10px;border:1px solid var(--s3-border-control);border-radius:var(--s3-radius-pill);background:var(--s3-bg-surface);color:var(--s3-text);font-size:13px;white-space:nowrap;cursor:pointer}
+.pill b{font-family:var(--s3-font-mono);font-weight:var(--s3-weight-semibold);color:var(--s3-text-strong);margin-left:3px}
+.pill:hover{border-color:var(--s3-text-strong)}
+.pill[aria-expanded="true"]{background:var(--s3-bg-inverse);border-color:var(--s3-bg-inverse);color:var(--s3-text-inverse)}
+.pill[aria-expanded="true"] b{color:var(--s3-text-inverse)}
+.pop{position:absolute;top:calc(100% + 4px);left:var(--s3-space-5);width:min(360px,calc(100% - 2 * var(--s3-space-5)));display:flex;flex-direction:column;gap:var(--s3-space-3);padding:var(--s3-space-3) var(--s3-space-4) var(--s3-space-4);background:var(--s3-bg-surface);border:1px solid var(--s3-border-control);border-radius:var(--s3-radius-md);box-shadow:var(--s3-shadow-popover)}
+/* Height is capped to the space below the bar (app.mjs sets the exact value); the body scrolls and the header with Close stays pinned. */
+.pop{max-height:calc(100vh - 96px);max-height:calc(100dvh - 96px);overflow-y:auto;overscroll-behavior:contain}
+.pop[hidden]{display:none}
+.pop-h{display:flex;justify-content:space-between;align-items:center;gap:var(--s3-space-2);position:sticky;top:calc(-1 * var(--s3-space-3));z-index:1;margin:calc(-1 * var(--s3-space-3)) 0 0;padding:var(--s3-space-3) 0 var(--s3-space-1);background:var(--s3-bg-surface)}
+.pop-h h3{margin:0;font-size:var(--s3-text-sm);line-height:var(--s3-leading-sm);color:var(--s3-text-strong)}
+.pop-x{width:32px;height:32px;border:0;border-radius:var(--s3-radius-sm);background:none;font-size:20px;line-height:1;color:var(--s3-text-muted);cursor:pointer}
+.pop-x:hover{background:var(--s3-bg-subtle);color:var(--s3-text-strong)}
+.pop .x-hint{margin:0}
+@media (max-width:639px){
+  .ctl-bar-wrap{margin:0 calc(-1 * var(--s3-space-4)) var(--s3-space-3);padding:var(--s3-space-2) var(--s3-space-4)}
+  .ctl-bar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;padding-bottom:2px}
+  .bar-g+.bar-g{padding-left:var(--s3-space-3)}
+  .bar-l i{display:none} /* panel numbers are repeated in each popover's text */
+  .pop{left:var(--s3-space-4)!important;right:var(--s3-space-4);width:auto}
+}
+.sw{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:baseline}
+.sw.a{background:var(--ca);border-radius:50%}
+.sw.b{background:var(--cb)}
+.x-seg button[aria-pressed="true"] .sw{outline:1.5px solid var(--s3-text-inverse)}
+
+.tl-scroll{overflow-x:auto;margin:0 calc(-1 * var(--s3-space-2));padding:0 var(--s3-space-2)}
+.tl-cue{display:none;margin:0 0 4px;font-size:var(--s3-text-xs);color:var(--s3-text-muted)}
+@media (max-width:800px){.tl-cue{display:block}}
+.fig{min-width:760px;touch-action:pan-x pan-y;user-select:none;-webkit-user-select:none;border-radius:var(--s3-radius-sm)}
+.fig svg{display:block;font-family:var(--s3-font-mono);font-size:11px}
+
+.fig .pnl.input{fill:var(--s3-bg-surface);stroke:var(--s3-border-control);stroke-width:1.25}
+.fig .pnl.ue{fill:rgb(240 238 230 / .7)}
+.fig .pnl.out{fill:var(--s3-bg-surface);stroke:var(--s3-text-strong);stroke-width:1.5}
+.fig .badge.input{fill:var(--s3-clay-700)}
+.fig .badge.ue{fill:var(--s3-stone-800)}
+.fig .badge.out{fill:var(--s3-stone-950)}
+.fig .badgen{fill:var(--s3-text-inverse);font-weight:var(--s3-weight-semibold);font-size:12px}
+.fig .st{font-family:var(--s3-font-sans);font-size:14px;font-weight:var(--s3-weight-semibold);fill:var(--s3-text-strong)}
+.fig .sq{font-size:12px;font-weight:var(--s3-weight-regular);fill:var(--s3-text)}
+.fig .tag{font-size:10.5px;letter-spacing:.06em;font-weight:var(--s3-weight-semibold);fill:var(--s3-text-muted)}
+.fig .tag.input{fill:var(--s3-clay-700)}
+.fig .tag.out{fill:var(--s3-text-strong)}
+.fig .rail,.fig .railhead{stroke:var(--s3-stone-500);stroke-width:1.5;fill:none}
+.fig .cap{font-family:var(--s3-font-sans);font-size:11.5px;fill:var(--s3-text-muted);font-style:italic}
+.fig .ro{fill:var(--s3-text-muted);font-size:11px}
+.fig .key{fill:var(--s3-text-muted);font-size:10.5px}
+.fig .rept{stroke:var(--s3-text-strong);stroke-width:1.5}
+.fig .rbox{fill:var(--s3-bg-surface);stroke:var(--s3-text-strong);stroke-width:1.25}
+.fig .rbox.empty{stroke-dasharray:3 2}
+.fig .slot.a{fill:var(--ca)}
+.fig .slot.b{fill:var(--cb)}
+.fig .slotl{fill:var(--s3-text-inverse);font-weight:var(--s3-weight-semibold);font-size:11px}
+.fig .slote{fill:var(--s3-text-muted)}
+.fig .omitb{fill:none;stroke:var(--s3-stone-500);stroke-width:1.25;stroke-dasharray:3 2}
+.fig .omitl{fill:var(--s3-text-muted);font-size:11px}
+.fig .lt{font-weight:var(--s3-weight-semibold);fill:var(--s3-text-strong);font-size:12px}
+.fig .sub,.fig tspan.sub{font-weight:var(--s3-weight-regular);fill:var(--s3-text-muted)}
+.fig .yt,.fig .rl,.fig .ax{fill:var(--s3-text-muted)}
+.fig .yt.strong,.fig .rl{fill:var(--s3-text-strong)}
+.fig .grid{stroke:var(--s3-border-subtle);stroke-width:1}
+.fig .band{fill:rgb(158 74 47 / .07)}
+.fig .spcell{stroke:var(--s3-text-muted);stroke-width:1.5;stroke-dasharray:2 3}
+.fig .th{stroke:var(--th);stroke-width:1.5}
+.fig .th.leave{stroke-dasharray:6 4}
+.fig .thl{fill:var(--th);font-size:11px;paint-order:stroke;stroke:var(--s3-bg-surface);stroke-width:4px;stroke-linejoin:round}
+.fig .thl.band-l{fill:var(--s3-text-muted)}
+.fig .trace{fill:none;stroke-width:2.25;stroke-linejoin:round}
+.fig .trace.a{stroke:var(--ca)}
+.fig .trace.b{stroke:var(--cb);stroke-dasharray:7 3}
+.fig .mk.a circle,.fig .caret.a circle{fill:var(--ca)}
+.fig .mk.b rect,.fig .caret.b rect{fill:var(--cb)}
+.fig .mk text{fill:var(--s3-text-strong);font-weight:var(--s3-weight-semibold);font-size:12px}
+.fig .caret circle,.fig .caret rect{stroke:var(--s3-bg-surface);stroke-width:2}
+.fig .hit{fill:transparent;cursor:crosshair}
+
+.fig .tb{stroke-width:1.5}
+.fig .tb.a{fill:rgb(46 110 158 / .18);stroke:var(--ca)}
+.fig .tb.b{fill:rgb(185 132 42 / .2);stroke:var(--cb)}
+.fig .tb.cancelled{stroke-dasharray:3 2}
+.fig .tb.open{stroke-dasharray:1 2}
+.fig .tbl{fill:var(--s3-text-strong);font-size:10px}
+.fig .cx{fill:var(--th);font-weight:var(--s3-weight-semibold);font-size:12px}
+
+.fig .entry{fill:var(--s3-stone-500)}
+.fig .rowl{stroke:var(--s3-border-subtle)}
+.fig .mem.a{fill:var(--ca)}
+.fig .mem.b{fill:var(--cb)}
+.fig .meml{fill:var(--s3-text-inverse);font-size:11px;font-weight:var(--s3-weight-semibold)}
+
+.fig .rep line{stroke:var(--s3-text-strong);stroke-width:1}
+.fig .rep rect{fill:var(--s3-text-strong)}
+.fig .rep text{fill:var(--s3-text-strong);font-weight:var(--s3-weight-semibold);font-size:11px}
+.fig .rep.empty rect{fill:var(--s3-bg-surface);stroke:var(--s3-text-strong);stroke-width:1.5}
+.fig .rep.empty text{fill:var(--s3-text-muted);font-weight:var(--s3-weight-regular)}
+.fig .tmr{fill:rgb(20 20 19 / .12);stroke:var(--s3-text-muted);stroke-width:1}
+.fig .tmr.expired{stroke:var(--s3-text-strong)}
+.fig .tmr.running{stroke-dasharray:2 2}
+.fig .tmx{fill:var(--s3-text-muted);font-size:10px}
+
+.fig .amt{stroke:var(--th);stroke-dasharray:5 4;stroke-width:1.5}
+.fig .amtl,.fig .rst{fill:var(--th)}
+.fig .base{stroke:var(--s3-border-subtle)}
+.fig .step{fill:none;stroke:var(--s3-text-strong);stroke-width:2.25}
+.fig .cv{fill:var(--s3-text-strong);font-weight:var(--s3-weight-semibold)}
+.fig .axl,.fig .tick{stroke:var(--s3-border-control)}
+.fig .cursor{stroke:var(--s3-text-strong);stroke-width:1.5;stroke-dasharray:1 3}
+.fig .curb{fill:var(--s3-bg-inverse)}
+.fig .curl{fill:var(--s3-text-inverse);font-weight:var(--s3-weight-semibold);font-size:12px}
+
+/* Below the figure */
+.ctl-below{display:grid;grid-template-columns:minmax(300px,5fr) 6fr;gap:var(--s3-space-5);align-items:start}
+.ctl-now{display:flex;flex-direction:column;gap:var(--s3-space-5)}
+.now-h{display:flex;justify-content:space-between;align-items:center;gap:var(--s3-space-2);flex-wrap:wrap}
+.now-h h2{margin:0}
+.now-h output{font-family:var(--s3-font-mono);color:var(--s3-text-strong)}
+.now-nav{display:flex;gap:var(--s3-space-2)}
+#cur{width:100%;accent-color:var(--s3-clay-500);min-height:32px;margin:var(--s3-space-2) 0}
+.state,.msg{display:grid;grid-template-columns:max-content 1fr;gap:6px var(--s3-space-4);margin:0;font-size:var(--s3-text-sm);line-height:var(--s3-leading-sm)}
+.state dt,.msg dt{font-family:var(--s3-font-mono);font-size:var(--s3-text-xs);color:var(--s3-text-muted);padding-top:2px}
+.state dd,.msg dd{margin:0;color:var(--s3-text-strong)}
+.muted{color:var(--s3-text-muted)}
+.chipc{display:inline-flex;align-items:center;padding:1px 8px;border:1px solid var(--s3-border-control);border-radius:var(--s3-radius-pill);font-weight:var(--s3-weight-semibold)}
+.cellv{font-weight:var(--s3-weight-semibold)}
+.rep-h{margin:0 0 var(--s3-space-3);font-size:var(--s3-text-sm)}
+.msg{padding:var(--s3-space-3);background:var(--s3-bg-subtle);border-radius:var(--s3-radius-sm);font-family:var(--s3-font-mono)}
+.omit{margin:var(--s3-space-3) 0 0;padding:6px 10px;border-left:3px solid var(--th);background:var(--s3-bg-subtle);border-radius:0 var(--s3-radius-sm) var(--s3-radius-sm) 0;font-size:var(--s3-text-sm)}
+
+.ctl-log .x-hint{margin:0 0 var(--s3-space-2)}
+.log{list-style:none;margin:0;padding:0;max-height:560px;overflow-y:auto;border-top:1px solid var(--s3-border-subtle)}
+.log li{border-bottom:1px solid var(--s3-border-subtle)}
+.log button{display:grid;grid-template-columns:64px 1fr auto;gap:var(--s3-space-3);width:100%;padding:8px 4px;border:0;background:none;text-align:left;font:inherit;font-size:var(--s3-text-sm);line-height:var(--s3-leading-sm);color:var(--s3-text);cursor:pointer}
+.log button:hover{background:var(--s3-bg-subtle)}
+.log .lt-t{font-family:var(--s3-font-mono);font-size:var(--s3-text-xs);color:var(--s3-text-strong);padding-top:2px}
+.log .lt-c{font-family:var(--s3-font-mono);font-size:var(--s3-text-xs);color:var(--s3-text-muted);padding-top:2px}
+.log li.enter .lt-x,.log li.leave .lt-x,.log li.empty .lt-x{color:var(--s3-text-strong);font-weight:var(--s3-weight-semibold)}
+.log li.report .lt-x{color:var(--s3-text-strong)}
+.log li.later{opacity:.45}
+.log li.now{background:var(--s3-bg-subtle);box-shadow:inset 3px 0 0 var(--s3-text-strong)}
+
+@media (max-width:899px){.ctl-below{grid-template-columns:1fr}}
+@media (max-width:479px){.state,.msg{grid-template-columns:1fr;gap:0 0}.state dd,.msg dd{margin-bottom:6px}.log button{grid-template-columns:56px 1fr}.log .lt-c{display:none}}

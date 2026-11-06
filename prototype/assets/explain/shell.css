@@ -1,0 +1,37 @@
+/* Shared shell for explainer-style labs (BSR, BFR). Page figures live in each lab. */
+.x-nav{min-height:48px;display:flex;align-items:center;gap:var(--s3-space-4);padding:0 var(--s3-gutter);border-bottom:1px solid var(--s3-border-subtle);font-size:var(--s3-text-sm);background:var(--s3-bg-surface)}
+.x-nav a{min-height:44px;display:flex;align-items:center;text-decoration:none}
+.x-nav strong{color:var(--s3-text-strong)}
+.x-nav .note{margin-left:auto;color:var(--s3-text-muted);font-size:var(--s3-text-xs)}
+.x-main{max-width:var(--s3-page-max);margin:0 auto;padding:var(--s3-space-6) var(--s3-gutter) var(--s3-space-8)}
+.x-intro{max-width:var(--s3-measure);margin-bottom:var(--s3-space-5)}
+.x-intro .eyebrow{margin:0 0 var(--s3-space-1);font:var(--s3-text-xs)/var(--s3-leading-xs) var(--s3-font-mono);color:var(--s3-text-muted);letter-spacing:.04em;text-transform:uppercase}
+.x-intro h1{margin:0 0 var(--s3-space-2);font-size:var(--s3-text-2xl);line-height:var(--s3-leading-2xl);letter-spacing:var(--s3-tracking-tight);color:var(--s3-text-strong);font-weight:var(--s3-weight-semibold)}
+.x-intro p{margin:0}
+.x-presets{display:flex;flex-wrap:wrap;gap:var(--s3-space-2);align-items:center;margin:0 0 var(--s3-space-4)}
+.x-presets>span{font-size:var(--s3-text-sm);color:var(--s3-text-muted);margin-right:var(--s3-space-1)}
+.x-chip{min-height:36px;padding:0 var(--s3-space-3);border:1px solid var(--s3-border-control);border-radius:var(--s3-radius-pill);background:var(--s3-bg-surface);color:var(--s3-text-strong);font-size:var(--s3-text-sm);cursor:pointer}
+.x-chip:hover{border-color:var(--s3-text-strong)}
+.x-chip[aria-pressed="true"]{background:var(--s3-bg-inverse);color:var(--s3-text-inverse);border-color:var(--s3-bg-inverse)}
+.x-card{background:var(--s3-bg-surface);border:1px solid var(--s3-border-subtle);border-radius:var(--s3-radius-md);padding:var(--s3-space-5)}
+.x-label{margin:0 0 var(--s3-space-2);font:var(--s3-weight-semibold) var(--s3-text-xs)/var(--s3-leading-xs) var(--s3-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--s3-text-muted)}
+.x-inputs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--s3-space-4) var(--s3-space-5);margin-top:var(--s3-space-3)}
+.x-field label,.x-field legend{display:flex;justify-content:space-between;gap:var(--s3-space-2);font-size:var(--s3-text-sm);color:var(--s3-text-strong);padding:0}
+.x-field output{font-family:var(--s3-font-mono);color:var(--s3-text)}
+.x-field input[type=range]{width:100%;accent-color:var(--s3-clay-500);min-height:32px}
+.x-field fieldset{border:0;margin:0;padding:0}
+.x-seg{display:inline-flex;border:1px solid var(--s3-border-control);border-radius:var(--s3-radius-sm);overflow:hidden;margin-top:var(--s3-space-1)}
+.x-seg button{min-height:36px;padding:0 var(--s3-space-3);border:0;background:var(--s3-bg-surface);font-size:var(--s3-text-sm);cursor:pointer;color:var(--s3-text-strong)}
+.x-seg button+button{border-left:1px solid var(--s3-border-control)}
+.x-seg button[aria-pressed="true"]{background:var(--s3-bg-inverse);color:var(--s3-text-inverse)}
+.x-hint{font-size:var(--s3-text-xs);line-height:var(--s3-leading-xs);color:var(--s3-text-muted);margin:var(--s3-space-1) 0 0}
+.x-details{max-width:80ch;margin-top:var(--s3-space-7)}
+.x-details h2{font-size:var(--s3-text-xl);line-height:var(--s3-leading-xl);color:var(--s3-text-strong);margin:0 0 var(--s3-space-3)}
+.x-details details{border-top:1px solid var(--s3-border-subtle);padding:var(--s3-space-3) 0}
+.x-details summary{cursor:pointer;font-weight:var(--s3-weight-semibold);color:var(--s3-text-strong);min-height:32px}
+.x-details table{border-collapse:collapse;font-size:var(--s3-text-sm);margin:var(--s3-space-2) 0}
+.x-details th,.x-details td{border-bottom:1px solid var(--s3-border-subtle);padding:4px 10px 4px 0;text-align:left;vertical-align:top}
+.x-mono{font-family:var(--s3-font-mono);font-size:.92em}
+button:focus-visible,input:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:var(--s3-focus-w) solid var(--s3-focus);outline-offset:var(--s3-focus-offset)}
+@media (max-width:639px){.x-intro h1{font-size:var(--s3-text-xl);line-height:var(--s3-leading-xl)}.x-card{padding:var(--s3-space-4)}.x-nav .note{display:none}.x-main{padding-top:var(--s3-space-5)}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
