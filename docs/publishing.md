@@ -21,3 +21,5 @@ The release includes only the labs listed in `public-labs.json`. Each public lab
 If GitHub is ahead, integrate its changes into the local `main` branch and resolve any conflicts before running the command again. The script never force-pushes. If deployment or verification fails after the push, GitHub may be ahead of the live site; correct the problem and rerun the command. The script prints the release manifest location on success.
 
 GitHub push access and Cloudflare Wrangler authentication must already be configured. Set `WRANGLER_JS` to use an existing local Wrangler installation; otherwise the script uses Wrangler 4.156.2 through `npx`. `PUBLISH_MESSAGE` can override the default commit message. `RELEASE_MANIFEST` can point to a location where a copy of the manifest should be saved. The default verification URL is `https://3gpp.studio`; `SITE_CHECK_URL` can override it for an explicit verification target.
+
+When changing the publication scripts, run `python3 tests/publish_workflow_test.py`. This test uses a temporary local Git repository and a simulated deployment; it does not push to GitHub or deploy the website.
