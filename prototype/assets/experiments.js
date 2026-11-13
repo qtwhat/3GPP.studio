@@ -71,7 +71,7 @@ window.S3_EXPERIMENTS = [
     "status": "live",
     "order": 2,
     "title": "Logical Channel Prioritization (LCP) · 2",
-    "summary": "Split a single grant across three queues, then see which channels can sustain their rates over one second.",
+    "summary": "Priority says who goes first. PBR says for how many bytes.",
     "topics": [
       "scheduling"
     ],
@@ -118,7 +118,7 @@ window.S3_EXPERIMENTS = [
     "status": "live",
     "order": 4,
     "title": "Buffer Status Reporting (BSR) · 2",
-    "summary": "Choose an uplink grant using only the reported bucket. Reveal the UE queues to see what your decision cost.",
+    "summary": "1,400 bytes are waiting. The network hears 5 bits.",
     "topics": [
       "scheduling"
     ],
@@ -169,7 +169,7 @@ window.S3_EXPERIMENTS = [
     "status": "live",
     "order": 6,
     "title": "Beam Failure Recovery (BFR) · 2",
-    "summary": "Hold to block the serving beam. Compare a brief obstruction with a sustained one and watch recovery unfold.",
+    "summary": "One bad reading is a blip. Three close together is a failure.",
     "topics": [
       "beam"
     ],
@@ -224,7 +224,7 @@ window.S3_EXPERIMENTS = [
     "status": "live",
     "order": 8,
     "title": "Scheduling Request (SR)",
-    "summary": "Add uplink data and watch the UE request a grant. Change how often requests are missed to explore retries and random access.",
+    "summary": "Data to send, and no permission. All the phone may send is one bit.",
     "topics": [
       "scheduling"
     ],
@@ -243,7 +243,7 @@ window.S3_EXPERIMENTS = [
     "status": "live",
     "order": 9,
     "title": "Random Access (RA)",
-    "summary": "Choose a preamble, follow the four messages, then increase the crowd and watch collisions.",
+    "summary": "Nobody is expecting you. Pick a door and knock.",
     "topics": [
       "access"
     ],
@@ -262,7 +262,7 @@ window.S3_EXPERIMENTS = [
     "status": "live",
     "order": 10,
     "title": "HARQ",
-    "summary": "Jam transmissions and see how retransmissions combine while other HARQ processes keep sending.",
+    "summary": "A failed block is not thrown away. It is half of the next attempt.",
     "topics": [
       "scheduling"
     ],
@@ -281,7 +281,7 @@ window.S3_EXPERIMENTS = [
     "status": "live",
     "order": 11,
     "title": "DRX and LP-WUS",
-    "summary": "Place downlink packets on a timeline and compare receiver activity and delivery delay across listening modes.",
+    "summary": "Listening costs battery. Sleeping costs delay.",
     "topics": [
       "power"
     ],
