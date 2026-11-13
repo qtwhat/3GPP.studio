@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HARQ Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a grid. Columns are slots, rows are HARQ processes. Each cell is one block on the air.
+   You are the noise: jam a slot and watch the rows work around it. */
+:root{
+  --bg:#EDF0F4; --surface:#FFFFFF; --sunk:#E2E7EE; --ink:#0F1B2D; --muted:#566378; --line:#C9D2DD;
+  --accent:#2A5BD7; --bad:#C2334B; --good:#1B7F45; --warn:#A8690B; --lp:#7650C9;
+  --font-display:"Bricolage Grotesque","Arial Narrow",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+    --accent:#86A9FF; --bad:#FF7C90; --good:#5DD08C; --warn:#E7B04D; --lp:#B79CFF;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+  --accent:#86A9FF; --bad:#FF7C90; --good:#5DD08C; --warn:#E7B04D; --lp:#B79CFF;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--font-body)}
+a{color:var(--accent)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .small{font-size:13px}
+.top{display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between;align-items:center;padding:18px 0;font-size:14px}
+.top a{text-decoration:none;font-weight:500}
+.top .tag{font-family:var(--font-mono);font-size:12px;color:var(--muted);letter-spacing:.02em}
+.hero{padding:28px 0 8px}
+h1{font:800 clamp(32px,5.6vw,62px)/1.04 var(--font-display);letter-spacing:-.025em;margin:0 0 18px;text-wrap:balance}
+h1 em{font-style:normal;color:var(--accent)}
+.lede{max-width:66ch;font-size:18px;margin:0 0 26px}
+h2{font:800 clamp(26px,3.6vw,40px)/1.08 var(--font-display);letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance}
+h3{font:700 17px/1.25 var(--font-display);margin:0}
+section{padding:36px 0}
+p.intro{max-width:68ch;margin:0 0 22px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.eyebrow{font:600 12px/1.3 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.btn{appearance:none;border:1px solid var(--ink);background:var(--ink);color:var(--surface);border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--ink)}
+.chip{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:14px;cursor:pointer;text-align:left}
+.chip:hover{border-color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-family:var(--font-mono);font-size:14px;max-width:100%}
+select:disabled{opacity:.4}
+
+.modes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.mode{appearance:none;text-align:left;border:2px solid var(--line);background:var(--surface);border-radius:10px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:4px}
+.mode:hover{border-color:var(--ink)}
+.mode b{font:700 16px/1.2 var(--font-display)}
+.mode span{font-size:13px;color:var(--muted)}
+.mode[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.row{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.look{margin:10px 0 0;max-width:84ch;font-size:15px}
+
+.tl{position:relative;margin-top:6px}
+#tl{display:block;width:100%;height:230px;background:var(--sunk);border-radius:6px;cursor:copy;touch-action:pan-y}
+.tl .lab{position:absolute;left:8px;font:500 11px/1 var(--font-mono);color:var(--muted);pointer-events:none;background:color-mix(in srgb,var(--sunk) 80%,transparent);padding:2px 4px;border-radius:3px}
+.xax{display:flex;justify-content:space-between;font:400 11px/1 var(--font-mono);color:var(--muted);margin-top:6px}
+.pk{fill:var(--ink)}
+.dl{fill:var(--good)} .dl.late{fill:var(--bad)}
+.wait{stroke:var(--good);stroke-width:1.5;vector-effect:non-scaling-stroke;opacity:.8}
+.wait.late{stroke:var(--bad)}
+.wait.pend{stroke:var(--bad);stroke-dasharray:3 3}
+.s-on{fill:var(--accent)} .s-in{fill:var(--accent);opacity:.45} .s-mon{fill:var(--lp)} .s-all{fill:var(--muted);opacity:.6}
+.s-skip{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.occ{fill:var(--lp);opacity:.3} .occ.sent{opacity:1}
+.grid{stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
+.lg{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--muted);margin-top:10px}
+.lg i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.lg i.sk{border:1.5px dashed var(--accent);background:none}
+
+.meters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+.meter{border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.meter .big{font:700 clamp(24px,3.4vw,34px)/1 var(--font-display)}
+.meter .big small{font:500 14px/1 var(--font-body);color:var(--muted)}
+.bar{position:relative;height:14px;background:var(--sunk);border-radius:3px}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--ink)}
+.bar i.ok{background:var(--good)} .bar i.no{background:var(--bad)}
+.bar u{position:absolute;top:-4px;bottom:-4px;border-left:2px dashed var(--warn)}
+.knobs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.knobs label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+.knobs code{font:600 12px/1.3 var(--font-mono);color:var(--accent);overflow-wrap:anywhere}
+.knobs label.off code{color:var(--muted)}
+.cmp{width:100%;border-collapse:collapse;font-size:14px}
+.cmp th{font:500 11px/1.2 var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;text-align:right;padding:6px 8px;border-bottom:1px solid var(--line)}
+.cmp th:first-child,.cmp td:first-child{text-align:left}
+.cmp td{padding:8px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.cmp td:first-child{font-family:var(--font-body)}
+.cmp tr.me td{font-weight:600;color:var(--accent)}
+.cmp .no{color:var(--bad)} .cmp .ok{color:var(--good)}
+.tablebox{overflow-x:auto}
+
+.steps{counter-reset:s;list-style:none;margin:20px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;max-width:980px}
+.steps li{counter-increment:s;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px}
+.steps li::before{content:counter(s);font:800 28px/1 var(--font-display);color:var(--accent);min-width:1.2em}
+.steps p{margin:4px 0 0}
+.map{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.map > div{padding:14px 16px;border-top:1px solid var(--line)}
+.map > .mh{border-top:0;background:var(--sunk);font:600 12px/1.3 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.map code{font:600 14px/1.3 var(--font-mono);color:var(--accent);overflow-wrap:anywhere}
+.map b{display:block}
+.fine{border-top:1px solid var(--line);padding:28px 0 56px;font-size:14px;color:var(--muted)}
+.fine p{max-width:80ch;margin:0 0 10px}
+.fine strong{color:var(--ink)}
+@media (max-width:900px){
+  .modes{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .knobs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .steps{grid-template-columns:1fr}
+  .map{grid-template-columns:1fr}
+  .map > .mh{display:none}
+  .map > div:nth-child(3n+1){background:var(--sunk)}
+}
+@media (max-width:560px){
+  .wrap{padding:0 16px}
+  .meters{grid-template-columns:1fr}
+  .modes{grid-template-columns:1fr}
+}
+
+.sr-occ{fill:var(--muted);opacity:.35}
+.sr-ok{fill:var(--accent)} .sr-miss{fill:var(--bad)} .sr-dup{fill:var(--accent);opacity:.45}
+.proh{fill:var(--accent);opacity:.12}
+.ra{fill:var(--warn);opacity:.55}
+.gr{fill:var(--good)} .gr.waste{fill:none;stroke:var(--warn);stroke-width:1.5;vector-effect:non-scaling-stroke}
+.envs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 28px;margin-top:14px}
+.envs label{font-size:14px;font-weight:600;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.envs label span{font-family:var(--font-mono);font-weight:500}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0;height:28px}
+.log{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 28px;font-size:14px}
+.log li{display:grid;grid-template-columns:7ch minmax(0,1fr);gap:8px}
+.log .tm{font-family:var(--font-mono);color:var(--muted);font-size:12px;padding-top:2px}
+.log .bad{color:var(--bad)} .log .good{color:var(--good)} .log .warn{color:var(--warn)}
+@media (max-width:900px){.log{grid-template-columns:1fr}.envs{grid-template-columns:1fr}}
+
+.gridbox{overflow-x:auto;margin-top:6px;padding-bottom:4px}
+.grid{display:grid;gap:2px;min-width:1000px;font:500 11px/1 var(--font-mono)}
+.grid .rl{position:sticky;left:0;background:var(--surface);display:flex;align-items:center;padding-right:8px;color:var(--muted);white-space:nowrap;z-index:1;font-size:11px}
+.cell{height:26px;border-radius:3px;background:var(--sunk);display:grid;place-items:center;min-width:0;position:relative;border:0;padding:0;font:inherit;color:inherit}
+button.cell{cursor:pointer}
+.cell.jam{background:var(--sunk);color:var(--muted)}
+.cell.jam.on{background:var(--ink);color:var(--surface)}
+.cell.tx{background:var(--accent);color:var(--surface);font-weight:600}
+.cell.tx.re{background:color-mix(in srgb,var(--accent) 55%,var(--surface))}
+.cell.tx.fail{box-shadow:inset 0 0 0 2px var(--bad)}
+.cell.tx.sel{outline:2px solid var(--ink);outline-offset:1px}
+.cell.wait{background:color-mix(in srgb,var(--accent) 12%,var(--sunk))}
+.cell.wait.ack{color:var(--good);font-weight:700}
+.cell.wait.nack{color:var(--bad);font-weight:700}
+.cell.idle{background:repeating-linear-gradient(135deg,var(--sunk) 0 4px,color-mix(in srgb,var(--bad) 35%,transparent) 4px 6px)}
+.cell.got{background:var(--good);color:var(--surface);font-weight:600}
+.cell.late{background:color-mix(in srgb,var(--good) 45%,var(--surface))}
+.cell.drop{background:var(--bad);color:var(--surface)}
+.cell.hd{background:none;color:var(--muted);height:16px}
+.stats{display:flex;flex-wrap:wrap;gap:12px 28px;margin:16px 0 0}
+.stats div{display:flex;flex-direction:column;gap:2px}
+.stats b{font:600 22px/1 var(--font-mono);font-variant-numeric:tabular-nums}
+.stats span{font-size:12px;color:var(--muted)}
+.stats .bad b{color:var(--bad)} .stats .ok b{color:var(--good)}
+.insp{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-top:14px}
+.att{display:flex;flex-direction:column;gap:10px}
+.att .a{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;font-size:14px}
+.soft{position:relative;height:16px;background:var(--sunk);border-radius:3px;overflow:hidden}
+.soft i{position:absolute;top:0;bottom:0;background:var(--muted);opacity:.5}
+.soft i.new{background:var(--accent);opacity:1}
+.soft u{position:absolute;top:0;bottom:0;left:66.67%;border-left:2px dashed var(--ink)}
+.say{margin:0;padding:12px;border-left:3px solid var(--ink);background:var(--sunk);border-radius:0 6px 6px 0;font-size:15px}
+.knobs{grid-template-columns:repeat(5,minmax(0,1fr))!important}
+@media (max-width:900px){.insp{grid-template-columns:1fr}.knobs{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a href="https://3gpp.studio/index.html">← All experiments</a>
+    <span class="tag">MAC · TS 38.321 §5.3.2, §5.4.2 · teaching model</span>
+  </header>
+</div>
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <h1>A failed block is not thrown away.<br><em>It is half of the next attempt.</em></h1>
+    <p class="lede">Radio corrupts data all the time, and the network plans for it. The receiver keeps every damaged copy, asks for another, and decodes the two together. Meanwhile the sender does not wait: it keeps several blocks in the air at once. You are the noise. Jam a slot and watch what it costs.</p>
+
+    <div class="panel">
+      <p class="eyebrow">What kind of link is it</p>
+      <div class="chips" id="presets" role="group" aria-label="Situations"></div>
+      <p class="look" id="look"></p>
+
+      <div class="gridbox"><div class="grid" id="grid"></div></div>
+      <div class="lg">
+        <span><i style="background:var(--accent)"></i>new block (number inside)</span>
+        <span><i style="background:color-mix(in srgb,var(--accent) 55%,var(--surface))"></i>retransmission</span>
+        <span><i style="box-shadow:inset 0 0 0 2px var(--bad);background:none"></i>not decoded yet</span>
+        <span><i style="background:color-mix(in srgb,var(--accent) 12%,var(--sunk))"></i>waiting for ✓ or ✗</span>
+        <span><i style="background:repeating-linear-gradient(135deg,var(--sunk) 0 4px,color-mix(in srgb,var(--bad) 35%,transparent) 4px 6px)"></i>slot wasted: every process is waiting</span>
+        <span><i style="background:var(--good)"></i>decoded</span>
+      </div>
+
+      <div class="stats" id="stats"></div>
+
+      <p class="eyebrow" style="margin-top:18px">The numbers behind it</p>
+      <div class="knobs" id="knobs"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn ghost" id="luck">Run again with new luck</button>
+        <button class="btn ghost" id="unjam">Clear my jamming</button>
+      </div>
+
+      <div class="insp">
+        <div>
+          <p class="eyebrow" id="iTitle"></p>
+          <div class="att" id="iAtt"></div>
+        </div>
+        <div>
+          <p class="eyebrow">What that shows</p>
+          <p class="say" id="iSay"></p>
+          <p class="small muted" style="margin:10px 0 0">Click any block in the grid to inspect it. The dashed line is how much signal decoding needs.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>The whole story, from zero</h2>
+    <ol class="steps">
+      <li><div><h3>Every block carries a checksum</h3><p>Data crosses the air in transport blocks, one per slot. Each has a checksum, so the receiver knows at once whether it decoded the block correctly.</p></div></li>
+      <li><div><h3>The receiver answers with one bit</h3><p>A few slots later it reports ACK, got it, or NACK, did not. That gap is the round trip: time to decode, plus time for the answer to travel back.</p></div></li>
+      <li><div><h3>A damaged copy is kept</h3><p>The receiver stores the failed attempt in a soft buffer. The retransmission carries the same data protected in a different way, called a redundancy version. Decoded together, two weak copies often succeed where neither would alone. This is the hybrid in hybrid ARQ.</p></div></li>
+      <li><div><h3>One process sends, then waits</h3><p>A HARQ process handles one block at a time. After sending, it cannot be reused until the answer comes back. With a single process, most slots would sit empty.</p></div></li>
+      <li><div><h3>So several take turns</h3><p>The sender runs several processes side by side, and each grant names the process it belongs to. While one waits for its answer, the others fill the slots. Enough processes to cover the round trip means no slot is wasted.</p></div></li>
+      <li><div><h3>One flag tells new from repeat</h3><p>Each grant carries a new-data indicator. If it has flipped since that process was last used, the block is new and the soft buffer is cleared. If it has not, the block is a retransmission and is combined with what is stored.</p></div></li>
+    </ol>
+    <p class="intro" style="margin-top:22px">Blocks therefore finish out of order, and the layer above (RLC) puts them back in sequence. If HARQ gives up on a block, RLC notices the gap and can ask for the data again. In the uplink the base station sends no ACK at all: it simply grants a retransmission or grants new data, and the indicator says which.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What each number is for</h2>
+    <p class="intro">Some of these are configured by RRC, and some are simply choices the base station's scheduler makes.</p>
+    <div class="map">
+      <div class="mh">The question</div><div class="mh">The knob</div><div class="mh">The trade</div>
+      <div><b>How many blocks can be in flight?</b></div>
+      <div><code>nrofHARQ-ProcessesForPDSCH</code><br><span class="small muted">up to 16 in ordinary operation</span></div>
+      <div>Fewer than the round trip needs, and slots go unused. Each process also needs its own soft buffer in the phone, so more processes cost memory.</div>
+      <div><b>How long until the answer is back?</b></div>
+      <div>Feedback timing<br><span class="small muted">the slot offset for the ACK, given in the grant from a configured list</span></div>
+      <div>Short answers repair errors fast and need few processes. The phone needs time to decode, so there is a floor, and it is higher for cheaper devices.</div>
+      <div><b>How often should a first attempt fail?</b></div>
+      <div>Link adaptation target<br><span class="small muted">a scheduler choice, commonly around one in ten</span></div>
+      <div>Sending cautiously wastes capacity on protection that is rarely needed. Sending boldly packs more into each block and lets retransmissions repair the failures.</div>
+      <div><b>How many attempts per block?</b></div>
+      <div>Maximum transmissions<br><span class="small muted">a scheduler choice</span></div>
+      <div>More attempts rescue more blocks at this layer. Each one delays everything queued behind that block in sequence.</div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="wrap fine">
+  <p><strong>What this lab simplifies.</strong> One direction, one cell, one block per slot, always more data to send. Signal quality is three made-up levels: a clean transmission carries all that decoding needs, a weak one 60%, a jammed one 30%, and with combining the copies simply add. Real combining gain depends on the code, the redundancy versions and the channel. The answer for a block arrives a fixed number of slots after it was sent, and the process can be reused in that same slot. Retransmissions go before new data. A dropped block is skipped by the in-order row as soon as the sender gives up. Not modelled: feedback errors, code block groups, bundled or multiplexed ACKs, HARQ with feedback disabled, the DRX timers that keep a phone awake for retransmissions, and RLC retransmission.</p>
+  <p><strong>Sources.</strong> 3GPP TS 38.321 §5.3.2 (downlink HARQ operation) and §5.4.2 (uplink HARQ operation). TS 38.212 (redundancy versions, new data indicator in the grant). TS 38.331 PDSCH-ServingCellConfig (number of processes). The specification is authoritative; this page is a teaching model. <a href="https://www.etsi.org/deliver/etsi_ts/138300_138399/138321/">Specification archive</a></p>
+</footer>
+
+<script id="engine">
+/* ---------- engine: no DOM in here ---------- */
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const S=48,Q_CLEAN=1,Q_WEAK=0.6,Q_JAM=0.3,RV=[0,2,3,1];
+function simulate(c,jam){                     // c: {N, RTT, p, combine, maxTx, seed}; jam: {slot:true}
+  const r=rng(c.seed),rnd=[];for(let t=0;t<S;t++)rnd.push(r());
+  const procs=[];for(let i=0;i<c.N;i++)procs.push({state:'free',tb:null,fbAt:-1,ndi:0});
+  const tbs=[],cells=procs.map(()=>new Array(S).fill(null)),air=new Array(S).fill(-1),decoded=new Array(S).fill(null),released=[];
+  for(let t=0;t<S;t++)released.push([]);
+  let next=0;
+  const release=t=>{while(next<tbs.length&&(tbs[next].done!==null&&tbs[next].done<=t||tbs[next].dropped!==null&&tbs[next].dropped<=t)){if(tbs[next].done!==null)released[t].push(tbs[next].id);next++;}};
+  for(let t=0;t<S;t++){
+    procs.forEach(p=>{
+      if(p.state==='wait'&&p.fbAt===t){
+        const tb=p.tb,last=tb.att[tb.att.length-1];
+        if(last.ok){p.state='free';p.tb=null;}
+        else if(tb.att.length<c.maxTx)p.state='retx';
+        else{tb.dropped=t;p.state='free';p.tb=null;}
+      }
+    });
+    let k=procs.findIndex(p=>p.state==='retx');
+    if(k<0)k=procs.findIndex(p=>p.state==='free');
+    if(k>=0){
+      const p=procs[k];
+      if(p.state==='free'){p.tb={id:tbs.length+1,proc:k,att:[],done:null,dropped:null,first:t,energy:0};tbs.push(p.tb);p.ndi^=1;}
+      const tb=p.tb,q=jam[t]?Q_JAM:(rnd[t]<c.p?Q_WEAK:Q_CLEAN),before=c.combine?tb.energy:0;
+      tb.energy=before+q;const ok=tb.energy>=1-1e-9;
+      tb.att.push({t,q,before,sum:tb.energy,ok,rv:RV[tb.att.length%4],kind:jam[t]?'jam':q<1?'weak':'clean',ndi:p.ndi});
+      if(ok){tb.done=t;decoded[t]=tb.id;}
+      cells[k][t]={type:'tx',tb:tb.id,n:tb.att.length,ok};
+      for(let u=t+1;u<t+c.RTT&&u<S;u++)cells[k][u]={type:'wait',fb:u===t+c.RTT-1?(ok?'ack':'nack'):null};
+      p.state='wait';p.fbAt=t+c.RTT;air[t]=k;
+    }
+    release(t);
+  }
+  const done=tbs.filter(b=>b.done!==null);
+  let ooo=0;done.forEach(b=>{if(tbs.some(o=>o.id<b.id&&(o.done===null||o.done>b.done)&&(o.dropped===null||o.dropped>b.done)))ooo++;});
+  return {tbs,cells,air,decoded,released,good:done.length,idle:air.filter(a=>a<0).length,
+          retx:tbs.reduce((a,b)=>a+b.att.length-1,0),dropped:tbs.filter(b=>b.dropped!==null).length,
+          worst:done.length?Math.max(...done.map(b=>b.done-b.first)):0,ooo};
+}
+if(typeof module!=='undefined')module.exports={simulate,S};
+</script>
+
+<script>
+/* ---------- view ---------- */
+const $=id=>document.getElementById(id);
+const PRESETS=[
+  {id:'normal',label:'An ordinary link',cfg:{N:8,RTT:4,p:0.1,combine:true,maxTx:4},look:'About one first attempt in ten is weak. Each failure comes back as a retransmission a few slots later, on the same row, and decodes on the second try. Every slot still carries a block. Only four of the eight processes are ever used, because the answer is back after four slots.'},
+  {id:'one',label:'Only one process',cfg:{N:1,RTT:4,p:0.1,combine:true,maxTx:4},look:'One process must wait for each answer before it can send again. Three slots in four go unused. This is why HARQ runs several processes in rotation.'},
+  {id:'rough',label:'A rough link',cfg:{N:8,RTT:4,p:0.5,combine:true,maxTx:4},look:'Half the transmissions are weak. With soft combining, two weak copies add up to enough, so nearly every block is done in two attempts.'},
+  {id:'nocomb',label:'Rough, and failed copies discarded',cfg:{N:8,RTT:4,p:0.5,combine:false,maxTx:4},look:'Same rough link, but each attempt is judged alone and failures are thrown away. A block now needs one clean transmission by luck. Compare the retransmissions and the dropped blocks with the previous case.'},
+  {id:'noharq',label:'No retransmissions at all',cfg:{N:8,RTT:4,p:0.1,combine:true,maxTx:1},look:'One attempt per block. Every weak transmission is a lost block that a higher layer must discover and repair much later.'}
+];
+const KN=[
+  {k:'N',label:'HARQ processes',vals:[1,2,4,8,16],show:v=>v},
+  {k:'RTT',label:'Slots until the answer is back',vals:[2,4,6,8],show:v=>v},
+  {k:'p',label:'Transmissions that arrive weak',vals:[0,0.1,0.3,0.5],show:v=>Math.round(v*100)+'%'},
+  {k:'combine',label:'Failed copies are',vals:[true,false],show:v=>v?'kept and combined':'discarded'},
+  {k:'maxTx',label:'Attempts per block',vals:[1,2,4,8],show:v=>v}
+];
+let cfg=Object.assign({seed:4},PRESETS[0].cfg),pid='normal',jam={},sim,sel=null;
+function drawPresets(){
+  $('presets').innerHTML=PRESETS.map(p=>'<button class="chip" data-p="'+p.id+'" aria-pressed="'+(p.id===pid)+'">'+p.label+'</button>').join('');
+  $('presets').querySelectorAll('button').forEach(b=>b.onclick=()=>{const p=PRESETS.find(x=>x.id===b.dataset.p);pid=p.id;Object.assign(cfg,p.cfg);sel=null;render();});
+  const p=PRESETS.find(x=>x.id===pid);
+  $('look').textContent=p?p.look:'Your own link. Change the numbers, or jam slots in the top row.';
+}
+function drawKnobs(){
+  $('knobs').innerHTML=KN.map(k=>'<label><code>'+k.label+'</code><select id="k_'+k.k+'">'+k.vals.map((v,i)=>'<option value="'+i+'"'+(v===cfg[k.k]?' selected':'')+'>'+k.show(v)+'</option>').join('')+'</select></label>').join('');
+  KN.forEach(k=>{$('k_'+k.k).onchange=e=>{cfg[k.k]=k.vals[+e.target.value];pid='';sel=null;render();};});
+}
+function drawGrid(){
+  const s=sim,g=$('grid');g.style.gridTemplateColumns='128px repeat('+S+',minmax(15px,1fr))';
+  let h='<span class="rl">Jam a slot</span>';
+  for(let t=0;t<S;t++)h+='<button class="cell jam'+(jam[t]?' on':'')+'" data-j="'+t+'" aria-pressed="'+!!jam[t]+'" aria-label="Jam slot '+t+'">'+(jam[t]?'×':'')+'</button>';
+  for(let k=0;k<cfg.N;k++){
+    h+='<span class="rl">Process '+k+'</span>';
+    for(let t=0;t<S;t++){
+      const c=s.cells[k][t];
+      if(!c)h+='<span class="cell'+(s.air[t]<0?' idle':'')+'"></span>';
+      else if(c.type==='tx')h+='<button class="cell tx'+(c.n>1?' re':'')+(c.ok?'':' fail')+(sel===c.tb?' sel':'')+'" data-tb="'+c.tb+'" aria-label="Block '+c.tb+', attempt '+c.n+(c.ok?', decoded':', not decoded')+'">'+c.tb+'</button>';
+      else h+='<span class="cell wait '+(c.fb||'')+'">'+(c.fb==='ack'?'✓':c.fb==='nack'?'✗':'')+'</span>';
+    }
+  }
+  h+='<span class="rl">Decoded</span>';
+  for(let t=0;t<S;t++)h+='<span class="cell'+(s.decoded[t]?' got':s.air[t]<0?' idle':'')+'">'+(s.decoded[t]||'')+'</span>';
+  h+='<span class="rl">Passed up in order</span>';
+  for(let t=0;t<S;t++){const r=s.released[t];h+='<span class="cell'+(r.length?' late':'')+'" title="'+r.join(', ')+'">'+(r.length?(r.length>1?'+'+r.length:r[0]):'')+'</span>';}
+  h+='<span class="rl">Slot</span>';
+  for(let t=0;t<S;t++)h+='<span class="cell hd">'+(t%4===0?t:'')+'</span>';
+  g.innerHTML=h;
+  g.querySelectorAll('[data-j]').forEach(b=>b.onclick=()=>{const t=+b.dataset.j;if(jam[t])delete jam[t];else jam[t]=true;render();});
+  g.querySelectorAll('[data-tb]').forEach(b=>b.onclick=()=>{sel=+b.dataset.tb;render();});
+}
+function drawStats(){
+  const s=sim,use=Math.round(s.good/S*100);
+  const st=['<div class="'+(use>=85?'ok':'')+'"><b>'+s.good+' of '+S+'</b><span>slots that delivered a block</span></div>',
+    '<div class="'+(s.idle?'bad':'')+'"><b>'+s.idle+'</b><span>slots wasted waiting</span></div>',
+    '<div><b>'+s.retx+'</b><span>retransmissions</span></div>',
+    '<div class="'+(s.dropped?'bad':'')+'"><b>'+s.dropped+'</b><span>blocks given up on</span></div>',
+    '<div><b>'+s.worst+' slots</b><span>longest a block took to decode</span></div>',
+    '<div><b>'+s.ooo+'</b><span>blocks that finished out of order</span></div>'];
+  $('stats').innerHTML=st.join('');
+}
+function drawInspector(){
+  const s=sim;
+  if(sel===null||!s.tbs[sel-1]){const m=s.tbs.find(b=>b.att.length>1)||s.tbs[0];sel=m?m.id:null;}
+  const b=sel?s.tbs[sel-1]:null;
+  if(!b){$('iTitle').textContent='No block to inspect';$('iAtt').innerHTML='';$('iSay').textContent='Nothing was sent.';return;}
+  $('iTitle').textContent='Block '+b.id+' · process '+b.proc;
+  $('iAtt').innerHTML=b.att.map((a,i)=>{
+    const sc=100/1.5,w0=Math.min(100,a.before*sc),w1=Math.min(100-w0,a.q*sc);
+    return '<div class="a"><span><b>Attempt '+(i+1)+'</b>, slot '+a.t+', redundancy version '+a.rv+'. '
+      +(a.kind==='jam'?'Jammed by you':a.kind==='weak'?'Arrived weak':'Arrived clean')+': '+Math.round(a.q*100)+'% of what decoding needs'
+      +(i>0?(cfg.combine?', on top of '+Math.round(a.before*100)+'% already stored':', and the earlier copy was discarded'):'')+'. '
+      +'<b style="color:var(--'+(a.ok?'good':'bad')+')">'+(a.ok?'Decoded.':'Not decoded.')+'</b></span>'
+      +'<div class="soft"><i style="left:0;width:'+w0+'%"></i><i class="new" style="left:'+w0+'%;width:'+w1+'%"></i><u></u></div></div>';
+  }).join('');
+  let say;const n=b.att.length;
+  if(b.done!==null&&n===1)say='Clean on the first try. The new-data indicator flipped when this block started, which told the receiver to clear the soft buffer for process '+b.proc+'.';
+  else if(b.done!==null&&cfg.combine)say=(b.att[n-1].q>=1?'The earlier cop'+(n>2?'ies were':'y was')+' too weak. Attempt '+n+' arrived clean and would have decoded alone; what was stored only added margin.':'No single attempt was enough. The receiver kept each copy and decoded them together on attempt '+n+'.')+' That was '+(b.done-b.first)+' slots after the first try. The indicator stayed the same for every retransmission, which told the receiver to combine.';
+  else if(b.done!==null)say='Each attempt was judged alone. The block got through on attempt '+n+' only because that one transmission happened to be clean.';
+  else if(b.dropped!==null)say='After '+n+' attempt'+(n>1?'s':'')+' the sender gave up. HARQ has no more to offer this block; the layer above will notice the gap and has to recover the data itself.';
+  else say='Still in progress when the strip ended.';
+  $('iSay').textContent=say;
+}
+function render(){sim=simulate(cfg,jam);drawPresets();drawKnobs();drawInspector();drawGrid();drawStats();}
+$('luck').onclick=()=>{cfg.seed=(cfg.seed*31+7)%99991;sel=null;render();};
+$('unjam').onclick=()=>{jam={};render();};
+function start(saved){
+  saved=saved||{};
+  if(saved.cfg&&typeof saved.cfg.N==='number')cfg=saved.cfg;
+  if(saved.jam&&typeof saved.jam==='object')jam=saved.jam;
+  if(typeof saved.pid==='string')pid=saved.pid;
+  render();
+}
+const hot=window.claude&&window.claude.hot;
+if(hot&&hot.snapshot)hot.snapshot(()=>({cfg,jam,pid}));
+if(hot&&hot.ready)hot.ready(start);else start((hot&&hot.data)||{});
+</script>
+</body>
+</html>

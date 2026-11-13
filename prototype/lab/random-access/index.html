@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Random Access Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a wall of doors (preambles). First you are one phone choosing a door; then you are the network
+   watching a crowd choose. Same ink-on-fog system as the BSR, LCP and BFR labs. */
+:root{
+  --bg:#EDF0F4; --surface:#FFFFFF; --sunk:#E2E7EE; --ink:#0F1B2D; --muted:#566378; --line:#C9D2DD;
+  --accent:#2A5BD7; --bad:#C2334B; --good:#1B7F45; --warn:#A8690B;
+  --font-display:"Bricolage Grotesque","Arial Narrow",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+    --accent:#86A9FF; --bad:#FF7C90; --good:#5DD08C; --warn:#E7B04D;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+  --accent:#86A9FF; --bad:#FF7C90; --good:#5DD08C; --warn:#E7B04D;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--font-body)}
+a{color:var(--accent)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .small{font-size:13px}
+.top{display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between;align-items:center;padding:18px 0;font-size:14px}
+.top a{text-decoration:none;font-weight:500}
+.top .tag{font-family:var(--font-mono);font-size:12px;color:var(--muted);letter-spacing:.02em}
+.hero{padding:28px 0 8px}
+h1{font:800 clamp(32px,5.6vw,62px)/1.04 var(--font-display);letter-spacing:-.025em;margin:0 0 18px;text-wrap:balance}
+h1 em{font-style:normal;color:var(--accent)}
+.lede{max-width:64ch;font-size:18px;margin:0 0 26px}
+h2{font:800 clamp(26px,3.6vw,40px)/1.08 var(--font-display);letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance}
+h3{font:700 17px/1.25 var(--font-display);margin:0}
+section{padding:36px 0}
+p.intro{max-width:68ch;margin:0 0 22px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.eyebrow{font:600 12px/1.3 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.btn{appearance:none;border:1px solid var(--ink);background:var(--ink);color:var(--surface);border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--ink)}
+.chip{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:14px;cursor:pointer;text-align:left}
+.chip:hover{border-color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0;height:28px}
+select{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-family:var(--font-mono);font-size:14px;max-width:100%}
+
+/* you are the phone */
+.lab{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:14px}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.doors{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.door{appearance:none;position:relative;aspect-ratio:1/1.05;border:2px solid var(--line);border-radius:8px 8px 3px 3px;background:var(--sunk);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:6px 2px;min-width:0}
+.door:hover:not(:disabled){border-color:var(--ink)}
+.door:disabled{cursor:default}
+.door .dn{font:600 12px/1 var(--font-mono);color:var(--muted)}
+.door .who{display:flex;flex-wrap:wrap;gap:2px;justify-content:center;align-items:center;min-height:14px}
+.door .who i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.door .who b{font:700 11px/1 var(--font-mono);background:var(--accent);color:var(--surface);border-radius:3px;padding:2px 4px}
+.door.mine{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--sunk))}
+.door.clash{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,var(--sunk))}
+.slrow{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center}
+.slrow label{font-weight:600;font-size:14px}
+.slrow output{font:600 16px/1 var(--font-mono)}
+.slrow input{grid-column:1/-1}
+.meters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.meters > div{border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.meters b{font:600 18px/1.1 var(--font-mono)}
+.ladder{display:flex;flex-direction:column;gap:8px;min-height:236px}
+.rung{display:grid;grid-template-columns:54px minmax(0,1fr) 54px;align-items:center;gap:8px}
+.rung .end{font:600 12px/1 var(--font-mono);color:var(--muted);text-align:center}
+.arrow{position:relative;border:1px solid var(--line);border-radius:8px;padding:9px 12px;background:var(--sunk);font-size:14px}
+.arrow b{display:block;font:600 12px/1.2 var(--font-mono);letter-spacing:.04em;margin-bottom:2px}
+.rung.up .arrow{border-right:4px solid var(--accent)}
+.rung.down .arrow{border-left:4px solid var(--ink)}
+.rung.none .arrow{border:1px dashed var(--bad);background:transparent;color:var(--bad)}
+.rung.new{animation:slide .3s ease-out}
+@keyframes slide{from{opacity:.2;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.say{margin:0;padding:12px;border-left:3px solid var(--ink);background:var(--sunk);border-radius:0 6px 6px 0;font-size:15px}
+.say.win{border-left-color:var(--good)} .say.lose{border-left-color:var(--bad)}
+.past{list-style:none;margin:0;padding:0;font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+
+/* crowd */
+.look{margin:12px 0 18px;max-width:80ch;font-size:15px}
+.knobs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.knobs label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.knobs label b{color:var(--ink);font-weight:600}
+.fund{font-size:14px;margin:14px 0 0;max-width:86ch}
+.fund b{font-family:var(--font-mono)}
+.stats{display:flex;flex-wrap:wrap;gap:12px 28px;margin:16px 0}
+.stats div{display:flex;flex-direction:column;gap:2px}
+.stats b{font:600 22px/1 var(--font-mono);font-variant-numeric:tabular-nums}
+.stats span{font-size:12px;color:var(--muted)}
+.stats .bad b{color:var(--bad)} .stats .ok b{color:var(--good)}
+.charts{position:relative;cursor:crosshair;touch-action:pan-y;user-select:none}
+.charts svg{display:block;width:100%;background:var(--sunk);border-radius:4px}
+#cMain{height:150px} #cOut{height:50px}
+.lanelab{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin:10px 0 3px;flex-wrap:wrap}
+.cursor{position:absolute;top:0;bottom:0;width:0;border-left:2px solid var(--ink);pointer-events:none}
+.xax{display:flex;justify-content:space-between;font:400 11px/1 var(--font-mono);color:var(--muted);margin-top:6px}
+.f-in{fill:var(--good)} .f-lost{fill:var(--bad)} .f-out{fill:var(--muted);opacity:.5}
+.lg{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--muted);margin-top:8px}
+.lg i{display:inline-block;width:12px;height:10px;border-radius:2px;margin-right:6px}
+.mini{display:grid;gap:3px;margin-top:10px}
+.mini i{aspect-ratio:1/1;border-radius:3px;background:var(--sunk);font:600 11px/1 var(--font-mono);display:grid;place-items:center;font-style:normal;color:var(--muted);min-width:0;overflow:hidden}
+.mini i.one{background:var(--good);color:var(--surface)}
+.mini i.many{background:var(--bad);color:var(--surface)}
+.dhead{display:flex;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;align-items:baseline;margin-top:16px}
+
+.steps{counter-reset:s;list-style:none;margin:20px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;max-width:980px}
+.steps li{counter-increment:s;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px}
+.steps li::before{content:counter(s);font:800 28px/1 var(--font-display);color:var(--accent);min-width:1.2em}
+.steps p{margin:4px 0 0}
+.map{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.map > div{padding:14px 16px;border-top:1px solid var(--line)}
+.map > .mh{border-top:0;background:var(--sunk);font:600 12px/1.3 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.map code{font:600 14px/1.3 var(--font-mono);color:var(--accent);overflow-wrap:anywhere}
+.map b{display:block}
+.fine{border-top:1px solid var(--line);padding:28px 0 56px;font-size:14px;color:var(--muted)}
+.fine p{max-width:80ch;margin:0 0 10px}
+.fine strong{color:var(--ink)}
+@media (max-width:900px){
+  .lab{grid-template-columns:1fr}
+  .knobs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .steps{grid-template-columns:1fr}
+  .map{grid-template-columns:1fr}
+  .map > .mh{display:none}
+  .map > div:nth-child(3n+1){background:var(--sunk)}
+}
+@media (max-width:560px){
+  .wrap{padding:0 16px}
+  .rung{grid-template-columns:38px minmax(0,1fr) 38px;gap:5px}
+  .meters{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){.rung.new{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a href="https://3gpp.studio/index.html">← All experiments</a>
+    <span class="tag">MAC · TS 38.321 §5.1 · teaching model</span>
+  </header>
+</div>
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <h1>Nobody is expecting you.<br><em>Pick a door and knock.</em></h1>
+    <p class="lede">A phone that has just woken up has no slot, no identity in the cell and no timing. All it can do is send a short signal on a shared channel and hope. Random access is how a stranger becomes a scheduled user in four messages. You are the phone: get in.</p>
+
+    <div class="lab">
+      <div class="col">
+        <div class="panel">
+          <p class="eyebrow">The doors · 16 preambles in this occasion</p>
+          <div class="doors" id="doors"></div>
+          <div class="chips" style="margin-top:12px">
+            <button class="btn ghost" id="rnd">Pick one at random, like a real phone</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="slrow">
+            <label for="others">Other phones knocking at the same moment</label>
+            <output id="othersV" for="others"></output>
+            <input type="range" id="others" min="0" max="40" step="1">
+          </div>
+          <p class="small muted" style="margin:8px 0 0" id="alone"></p>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="panel">
+          <div class="meters">
+            <div><span class="small muted">Attempt</span><b id="mTry"></b></div>
+            <div><span class="small muted">Transmit power</span><b id="mPow"></b></div>
+            <div><span class="small muted">Time spent</span><b id="mTime"></b></div>
+          </div>
+        </div>
+        <div class="panel">
+          <p class="eyebrow">Between you and the gNB</p>
+          <div class="ladder" id="ladder"></div>
+          <p class="say" id="say" aria-live="polite" style="margin-top:12px"></p>
+          <div class="chips" style="margin-top:12px">
+            <button class="btn" id="next">Next</button>
+            <button class="btn ghost" id="again">Start over</button>
+          </div>
+          <ul class="past" id="past" style="margin-top:12px"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="crowd">
+  <div class="wrap">
+    <h2>Now watch a whole crowd try</h2>
+    <p class="intro">A train pulls in, a stadium empties, a cell comes back after an outage. Many phones knock in the same instant. An occasion comes every 10 ms. Set the numbers the network controls and see who gets in, and how long it takes.</p>
+
+    <div class="chips" id="presets" role="group" aria-label="Experiments"></div>
+    <p class="look" id="look"></p>
+
+    <div class="panel">
+      <p class="eyebrow">What the network sets</p>
+      <div class="knobs">
+        <label><b>Phones arriving at once</b><select id="kN"></select></label>
+        <label><b>Doors (preambles) per occasion</b><select id="kD"></select></label>
+        <label><b>Backoff: wait up to</b><select id="kB"></select></label>
+        <label><b>Attempts before giving up</b><select id="kM"></select></label>
+      </div>
+      <p class="fund" id="fund"></p>
+
+      <div class="stats" id="stats"></div>
+
+      <p class="eyebrow">Each occasion · phones that got in and phones that lost a collision</p>
+      <div class="charts" id="charts">
+        <svg id="cMain" preserveAspectRatio="none" role="img" aria-label="Phones admitted and collided per occasion"></svg>
+        <div class="lanelab"><span>Phones still outside</span><span class="num" id="outMax"></span></div>
+        <svg id="cOut" preserveAspectRatio="none" role="img" aria-label="Phones still waiting over time"></svg>
+        <div class="cursor" id="cursor"></div>
+      </div>
+      <div class="xax" id="xax"></div>
+      <div class="lg"><span><i style="background:var(--good)"></i>got in</span><span><i style="background:var(--bad)"></i>lost a collision, will retry or give up</span></div>
+      <input type="range" id="scrub" min="0" max="299" step="1" value="0" aria-label="Pick an occasion to inspect" style="margin-top:8px">
+
+      <div class="dhead"><h3 id="dTitle"></h3><span class="small muted">Click or drag on the chart to inspect any occasion</span></div>
+      <p class="small" id="dSay" style="margin:6px 0 0"></p>
+      <div class="mini" id="mini"></div>
+      <div class="chips" style="margin-top:14px"><button class="btn ghost" id="reroll">Run again with new luck</button></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>The whole story, from zero</h2>
+    <ol class="steps">
+      <li><div><h3>Why knock at all</h3><p>Normally a phone sends only when the base station (gNB) grants it a slot. A phone that is new to the cell, or has been idle, has no way to ask. The cell therefore sets aside regular moments, called random access occasions, where anyone may transmit without permission.</p></div></li>
+      <li><div><h3>Message 1: the knock</h3><p>The phone picks one of up to 64 short signals, called preambles, at random and sends it. A preamble carries no name and no data. It only says someone is here, on this door.</p></div></li>
+      <li><div><h3>If nobody answers, knock louder</h3><p>The phone starts quietly so it does not drown out others. If no reply comes within a set window, it cannot know whether it was too quiet or collided. It raises its power one step, waits a random time, and tries again.</p></div></li>
+      <li><div><h3>Message 2: the answer to a door</h3><p>The gNB replies to the door, not to a person: timing correction, a small uplink grant and a temporary identity. Every phone that used that door hears the same answer and believes it is theirs.</p></div></li>
+      <li><div><h3>Message 3: say who you are</h3><p>The phone uses the grant to send its identity. If two phones shared the door, both transmit on the same grant, on top of each other.</p></div></li>
+      <li><div><h3>Message 4: the gNB names one winner</h3><p>The gNB echoes back the identity it managed to decode. A phone that hears its own identity is in. A phone that hears another, or nothing before a timer runs out, has lost and starts again from message 1.</p></div></li>
+    </ol>
+    <p class="intro" style="margin-top:22px">Two shortcuts exist. When the gNB already knows the phone, as in a handover or a beam recovery, it can reserve a door for it, so no collision is possible and messages 3 and 4 are not needed. A 2-step variant sends the knock and the identity together.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What each number is for</h2>
+    <p class="intro">The gNB broadcasts most of these to every phone in the cell. One of them, the backoff, it can change from moment to moment inside message 2.</p>
+    <div class="map">
+      <div class="mh">The question</div><div class="mh">The knob</div><div class="mh">The trade</div>
+      <div><b>How many doors are there?</b></div>
+      <div><code>totalNumberOfRA-Preambles</code><br><span class="small muted">up to 64 per occasion, shared between beams and reserved uses</span></div>
+      <div>More doors mean fewer collisions. Each door kept for contention is one that cannot be reserved for handovers and beam recovery.</div>
+      <div><b>How loud is the first knock, and each one after?</b></div>
+      <div><code>preambleReceivedTargetPower</code>, <code>powerRampingStep</code><br><span class="small muted">step of 0, 2, 4 or 6 dB</span></div>
+      <div>A low start protects other users from interference but costs extra attempts. A big step gets heard sooner and overshoots more.</div>
+      <div><b>How long to wait for an answer?</b></div>
+      <div><code>ra-ResponseWindow</code><br><span class="small muted">1 to 80 slots</span></div>
+      <div>Short retries quickly. Long gives a busy gNB time to answer, and makes every failed attempt slower.</div>
+      <div><b>After a failure, how long to stay away?</b></div>
+      <div>Backoff Indicator<br><span class="small muted">sent in message 2; 5 ms to 1,920 ms</span></div>
+      <div>Each phone waits a random time up to this value. A long backoff spreads a crowd out and cuts collisions. It also makes every retry slower, even in an empty cell.</div>
+      <div><b>How long to wait for the verdict?</b></div>
+      <div><code>ra-ContentionResolutionTimer</code><br><span class="small muted">8 to 64 subframes</span></div>
+      <div>If message 4 has not named this phone when the timer ends, the attempt has failed.</div>
+      <div><b>When to stop trying?</b></div>
+      <div><code>preambleTransMax</code><br><span class="small muted">3 to 200 attempts</span></div>
+      <div>Past this count MAC reports a random access problem upward, and the phone treats the link as failed. Low gives up early in a crowd. High keeps a hopeless phone transmitting.</div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="wrap fine">
+  <p><strong>What this lab simplifies.</strong> Contention-based, 4-step random access only, on one beam. Sixteen doors in the first part so they fit on screen. When phones share a door, the gNB decodes one of them half the time and nobody the other half; real outcomes depend on received power and timing. Whether the first knock is loud enough is a hidden random level, not a path-loss calculation, and each attempt adds 2 dB. A failed attempt costs a fixed 40 ms before the backoff starts; a successful one takes 30 ms. Occasions come every 10 ms. Not modelled: beam (SSB) selection and its mapping to occasions, preamble groups A and B, the response window and contention timer as separate clocks, HARQ on message 3, contention-free and 2-step random access, prioritised access.</p>
+  <p><strong>Sources.</strong> 3GPP TS 38.321 §5.1 (random access procedure: resource selection, preamble transmission, response reception, contention resolution) and Table 7.2-1 (backoff values). TS 38.331 RACH-ConfigCommon and RACH-ConfigGeneric (value ranges). The specification is authoritative; this page is a teaching model. <a href="https://www.etsi.org/deliver/etsi_ts/138300_138399/138321/">Specification archive</a></p>
+</footer>
+
+<script id="engine">
+/* ---------- engine: no DOM in here ---------- */
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const OCC=10,HORIZON=300,FAIL_COST=4,OK_COST=3,CAPTURE=0.5;      // ms per occasion; occasions simulated; occasions lost per failure / spent per success
+function pAlone(n,doors){return n<=1?1:Math.pow(1-1/doors,n-1);}  // chance that none of the other n-1 phones picks your door
+function simulate(c){                                             // c: {N,doors,bi,max,seed}
+  const r=rng(c.seed),ph=[];for(let i=0;i<c.N;i++)ph.push({next:0,tries:0,done:null,gone:false});
+  const occ=[];
+  for(let t=0;t<HORIZON;t++){
+    const by={};let ready=0;
+    ph.forEach((p,i)=>{if(p.done===null&&!p.gone&&p.next<=t){const d=Math.floor(r()*c.doors);(by[d]=by[d]||[]).push(i);ready++;}});
+    const count=new Array(c.doors).fill(0);let inn=0,lost=0;
+    Object.keys(by).forEach(d=>{
+      const g=by[d];count[d]=g.length;let win=-1;
+      if(g.length===1)win=g[0];else if(r()<CAPTURE)win=g[Math.floor(r()*g.length)];
+      g.forEach(i=>{
+        const p=ph[i];p.tries++;
+        if(i===win){p.done=(t+OK_COST)*OCC;inn++;}
+        else{lost++;if(p.tries>=c.max)p.gone=true;else p.next=t+FAIL_COST+Math.ceil(r()*c.bi/OCC);}
+      });
+    });
+    const outside=ph.filter(p=>p.done===null&&!p.gone).length;
+    occ.push({ready,inn,lost,count,outside});
+  }
+  const times=ph.filter(p=>p.done!==null).map(p=>p.done).sort((a,b)=>a-b);
+  const q=f=>times.length?times[Math.min(times.length-1,Math.floor(f*times.length))]:null;
+  return {occ,connected:times.length,gaveUp:ph.filter(p=>p.gone).length,still:ph.filter(p=>p.done===null&&!p.gone).length,
+          median:q(0.5),p95:q(0.95),knocks:ph.reduce((a,p)=>a+p.tries,0)};
+}
+/* one phone, step by step */
+function heroNew(seed,others){const r=rng(seed);return {r,others,doors:16,max:6,n:0,need:1+Math.floor(r()*3),stage:'pick',door:null,crowd:[],time:0,past:[],out:null};}
+function heroPick(h,door){
+  h.door=door;h.n++;h.crowd=[];for(let i=0;i<h.others;i++)h.crowd.push(Math.floor(h.r()*h.doors));
+  h.heard=h.n>=h.need;h.same=h.crowd.filter(d=>d===door).length;h.stage='m1';
+}
+function heroNext(h){
+  if(h.stage==='m1'){if(h.heard){h.stage='m2';}else{h.stage='silent';h.time+=40;}}
+  else if(h.stage==='m2')h.stage='m3';
+  else if(h.stage==='m3'){
+    let res;
+    if(h.same===0)res='win';else if(h.r()<CAPTURE)res=h.r()<1/(h.same+1)?'win':'other';else res='none';
+    h.res=res;
+    if(res==='win'){h.stage='in';h.time+=30;}else{h.stage='lost';h.time+=40;}
+  }
+  else if(h.stage==='silent'||h.stage==='lost'){
+    h.past.push({n:h.n,door:h.door,why:h.stage==='silent'?'quiet':h.res,same:h.same});
+    if(h.n>=h.max){h.stage='fail';}
+    else{h.wait=Math.round(h.r()*8)*10;h.time+=h.wait;h.stage='pick';h.door=null;h.crowd=[];}
+  }
+  return h;
+}
+if(typeof module!=='undefined')module.exports={simulate,pAlone,heroNew,heroPick,heroNext,HORIZON,OCC};
+</script>
+
+<script>
+/* ---------- view ---------- */
+const $=id=>document.getElementById(id);
+const fmt=n=>n===null?'none':Math.round(n).toLocaleString('en-US');
+const pct=x=>Math.round(x*100)+'%';
+
+/* ----- you are the phone ----- */
+let H,hSeed=11,hOthers=8,fresh=false;
+function heroStart(){H=heroNew(hSeed,hOthers);fresh=false;drawHero();}
+function reveal(){return H.stage==='silent'||H.stage==='lost'||H.stage==='in'||H.stage==='fail';}
+function drawDoors(){
+  const show=reveal();let h='';
+  for(let d=0;d<16;d++){
+    const mine=H.door===d,n=show?H.crowd.filter(x=>x===d).length:0;
+    let who='';if(mine)who+='<b>you</b>';for(let i=0;i<Math.min(n,6);i++)who+='<i></i>';
+    h+='<button class="door'+(mine?' mine':'')+(show&&mine&&n>0?' clash':'')+'" data-d="'+d+'"'+(H.stage==='pick'?'':' disabled')+' aria-label="Door '+(d+1)+(mine?', yours':'')+(show&&n?', '+n+' other phones':'')+'"><span class="dn">'+(d+1)+'</span><span class="who">'+who+'</span></button>';
+  }
+  $('doors').innerHTML=h;
+  $('doors').querySelectorAll('button').forEach(b=>b.onclick=()=>{heroPick(H,+b.dataset.d);fresh=true;drawHero();});
+  $('rnd').disabled=H.stage!=='pick';
+}
+function rung(dir,title,text,isNew){
+  return '<div class="rung '+dir+(isNew?' new':'')+'"><span class="end">'+(dir==='down'?'':'you')+'</span><div class="arrow"><b>'+title+'</b>'+text+'</div><span class="end">'+(dir==='up'?'gNB →':dir==='down'?'← gNB':'')+'</span></div>';
+}
+function drawHero(){
+  $('others').value=hOthers;$('othersV').textContent=hOthers;
+  $('alone').textContent=hOthers===0?'You are the only one knocking. No collision is possible.'
+    :'With '+hOthers+' others on 16 doors, you have a door to yourself '+pct(pAlone(hOthers+1,16))+' of the time.';
+  $('mTry').textContent=Math.max(H.n,1)+' of '+H.max;
+  $('mPow').textContent='start + '+(Math.max(H.n,1)-1)*2+' dB';
+  $('mTime').textContent=H.time+' ms';
+  drawDoors();
+  const s=H.stage,door=H.door===null?'':H.door+1;let L='',say='',cls='';
+  const stages=['m1','m2','m3','lost','in','silent'];
+  if(s==='pick'){
+    L='';say=H.n===0?'Pick any door. The gNB is listening on all of them, and so, perhaps, are other phones you cannot see.'
+      :'You waited a random '+H.wait+' ms so you do not collide with the same phones again. Power is up 2 dB. Pick a door.';
+  }else{
+    L+=rung('up','MSG 1 · PREAMBLE','A short signal on door '+door+'. No name, no data.',s==='m1'&&fresh);
+    if(s==='m1')say='You knocked on door '+door+'. Now you listen for an answer addressed to that door.';
+    if(s==='silent'){L+=rung('none','NO ANSWER','The response window closed with nothing for door '+door+'.',true);cls='lose';
+      say='Silence. This time the knock was too quiet for the gNB to hear. From inside the phone, that looks exactly like a collision: either way the cure is the same.';}
+    if(s==='m2'||s==='m3'||s==='lost'||s==='in'){
+      L+=rung('down','MSG 2 · RANDOM ACCESS RESPONSE','To whoever used door '+door+': a timing correction, a small uplink grant, a temporary identity.',s==='m2');
+      if(s==='m2')say='An answer for door '+door+'. It is addressed to the door, not to you. If another phone knocked there too, it is reading this same message.';
+    }
+    if(s==='m3'||s==='lost'||s==='in'){
+      L+=rung('up','MSG 3 · WHO I AM','Your identity, sent on the grant from message 2.',s==='m3');
+      if(s==='m3')say='You have said who you are. If you were alone on the door, the gNB heard it cleanly. If not, someone else just transmitted on top of you.';
+    }
+    if(s==='in'){L+=rung('down','MSG 4 · CONTENTION RESOLUTION','The gNB echoes your identity.',true);cls='win';
+      say=(H.same?'You shared door '+door+' with '+H.same+' other phone'+(H.same>1?'s':'')+', and the gNB happened to decode yours. ':'You had door '+door+' to yourself. ')+'You are in, after '+H.n+' attempt'+(H.n>1?'s':'')+' and '+H.time+' ms. From here on the gNB schedules you by name.';}
+    if(s==='lost'){
+      L+=H.res==='other'?rung('down','MSG 4 · CONTENTION RESOLUTION','The gNB echoes an identity. It is not yours.',true)
+                        :rung('none','NO VERDICT','The contention timer ran out with no message 4.',true);cls='lose';
+      say=(H.res==='other'?'Another phone on door '+door+' won. ':'Message 3 from you and '+H.same+' other phone'+(H.same>1?'s':'')+' landed on top of each other and the gNB could decode neither. ')+'You only found out now, three messages in. Back to message 1.';}
+  }
+  if(s==='fail'){L='';cls='lose';say='Six attempts, none successful. MAC reports a random access problem to the layer above, which treats the link as failed. Lower the crowd and start over.';}
+  $('ladder').innerHTML=L||'<div class="rung none"><span class="end">you</span><div class="arrow" style="color:var(--muted);border-color:var(--line)">Nothing sent yet.</div><span class="end">gNB</span></div>';
+  $('say').className='say '+cls;$('say').textContent=say;
+  const nx=$('next');nx.disabled=s==='pick'||s==='in'||s==='fail';
+  nx.textContent=s==='silent'||s==='lost'?'Back off and try again':s==='m1'?'Listen for the answer':s==='m2'?'Send message 3':s==='m3'?'Wait for the verdict':'Next';
+  $('past').innerHTML=H.past.map(p=>'<li>Attempt '+p.n+': door '+(p.door+1)+', '+(p.why==='quiet'?'too quiet to be heard':p.why==='other'?'collided, another phone won':'collided, nobody decoded')+'.</li>').join('');
+  fresh=false;
+}
+
+/* ----- crowd ----- */
+const PRESETS=[
+  {id:'quiet',label:'A quiet cell',cfg:{N:6,doors:64,bi:0,max:10},look:'Six phones, 64 doors. Almost everyone has a door to itself and is in within 30 ms. This is the normal case, and the reason random access can afford to be this simple.'},
+  {id:'burst',label:'A train arrives',cfg:{N:150,doors:64,bi:0,max:10},look:'150 phones on 64 doors. Most doors hold several phones on the first occasion, so few get in. The losers all retry together, but each round thins the crowd and it clears.'},
+  {id:'narrow',label:'Same crowd, 8 doors',cfg:{N:150,doors:8,bi:0,max:10},look:'Now only 8 doors, as when the 64 preambles are split across beams and reserved uses. With no backoff the losers come back in step and collide again and again until they run out of attempts. Look at how many give up.'},
+  {id:'backoff',label:'8 doors, long backoff',cfg:{N:150,doors:8,bi:960,max:10},look:'Same 8 doors, but losers now wait a random time up to 960 ms. The crowd spreads over many occasions, collisions fall, and far more phones get in. The price is time: compare the median.'}
+];
+let C,sim,cur=0,active='burst',seed=5,VIEW=300;
+function setPreset(p){C=Object.assign({},p.cfg);active=p.id;}
+function opt(sel,vals,curv,lab){sel.innerHTML=vals.map(v=>'<option value="'+v+'"'+(v===curv?' selected':'')+'>'+lab(v)+'</option>').join('');}
+function drawKnobs(){
+  opt($('kN'),[1,6,20,50,100,150,300],C.N,v=>v);
+  opt($('kD'),[4,8,16,32,64],C.doors,v=>v);
+  opt($('kB'),[0,20,80,320,960,1920],C.bi,v=>v===0?'no backoff':v+' ms');
+  opt($('kM'),[3,6,10,20,50],C.max,v=>v);
+}
+function drawCrowd(){
+  $('presets').innerHTML=PRESETS.map(p=>'<button class="chip" data-p="'+p.id+'" aria-pressed="'+(p.id===active)+'">'+p.label+'</button>').join('');
+  $('presets').querySelectorAll('button').forEach(b=>b.onclick=()=>{setPreset(PRESETS.find(p=>p.id===b.dataset.p));cur=0;drawKnobs();recompute();});
+  const p=PRESETS.find(p=>p.id===active);
+  $('look').textContent=p?p.look:'Your own settings. The numbers and the chart below update as you change them.';
+  const pa=pAlone(C.N,C.doors);
+  $('fund').innerHTML='On the first occasion, <b>'+C.N+'</b> phones choose among <b>'+C.doors+'</b> doors. Each one has a door to itself <b>'+(pa>0.995&&C.N>1?'over 99%':pa<0.005?'less than 1%':pct(pa))+'</b> of the time.';
+  const s=sim,st=[];
+  st.push('<div class="'+(s.connected===C.N?'ok':'')+'"><b>'+s.connected+' of '+C.N+'</b><span>got in</span></div>');
+  st.push('<div class="'+(s.gaveUp?'bad':'')+'"><b>'+s.gaveUp+'</b><span>gave up after '+C.max+' attempts</span></div>');
+  if(s.still)st.push('<div><b>'+s.still+'</b><span>still trying after 3 s</span></div>');
+  st.push('<div><b>'+(s.median===null?'none':fmt(s.median)+' ms')+'</b><span>median time to get in</span></div>');
+  st.push('<div><b>'+(s.p95===null?'none':fmt(s.p95)+' ms')+'</b><span>slowest 5% took at least</span></div>');
+  st.push('<div><b>'+(s.knocks/C.N).toFixed(1)+'</b><span>knocks per phone</span></div>');
+  $('stats').innerHTML=st.join('');
+  const ymax=Math.max(4,...s.occ.slice(0,VIEW).map(o=>o.inn+o.lost));let h='';
+  s.occ.slice(0,VIEW).forEach((o,t)=>{
+    if(o.inn)h+='<rect class="f-in" x="'+t+'" y="'+(ymax-o.inn)+'" width="0.86" height="'+o.inn+'"/>';
+    if(o.lost)h+='<rect class="f-lost" x="'+t+'" y="'+(ymax-o.inn-o.lost)+'" width="0.86" height="'+o.lost+'"/>';
+  });
+  const m=$('cMain');m.setAttribute('viewBox','0 0 '+VIEW+' '+ymax);m.innerHTML=h;
+  let d='M0 '+C.N;s.occ.slice(0,VIEW).forEach((o,t)=>{d+=' L'+t+' '+(C.N-o.outside)+' L'+(t+1)+' '+(C.N-o.outside);});d+=' L'+VIEW+' '+C.N+' Z';
+  const o2=$('cOut');o2.setAttribute('viewBox','0 0 '+VIEW+' '+C.N);o2.innerHTML='<path class="f-out" d="'+d+'"/>';
+  $('outMax').textContent='top of the band = '+C.N+' phones';
+  $('xax').innerHTML=[0,0.25,0.5,0.75,1].map((f,i)=>'<span>'+fmt(f*VIEW*OCC)+(i===0||i===4?' ms':'')+'</span>').join('');
+  drawCursor();
+}
+function drawCursor(){
+  $('cursor').style.left=((cur+0.5)/VIEW*100)+'%';$('scrub').value=cur;
+  const o=sim.occ[cur];
+  $('dTitle').textContent='Occasion at '+cur*OCC+' ms';
+  const single=o.count.filter(c=>c===1).length,multi=o.count.filter(c=>c>1).length;
+  $('dSay').textContent=o.ready===0?'Nobody knocked. '+(o.outside?o.outside+' phones are still outside, waiting out a failed attempt or a backoff.':'Everyone is either in or has given up.')
+    :o.ready+' phone'+(o.ready>1?'s':'')+' knocked. '+single+' door'+(single===1?'':'s')+' had exactly one phone, '+multi+' had a collision. '+o.inn+' got in, '+o.lost+' lost.';
+  const cols=C.doors<=8?C.doors:C.doors<=16?8:16;
+  const mi=$('mini');mi.style.gridTemplateColumns='repeat('+cols+',minmax(0,'+(C.doors<=8?'44px':'32px')+'))';
+  mi.innerHTML=o.count.map(c=>'<i class="'+(c===1?'one':c>1?'many':'')+'">'+(c||'')+'</i>').join('');
+}
+function recompute(){sim=simulate(Object.assign({seed},C));let last=0;sim.occ.forEach((o,t)=>{if(o.ready>0)last=t;});VIEW=Math.min(HORIZON,Math.max(40,Math.ceil((last+4)/20)*20));cur=Math.min(cur,VIEW-1);$('scrub').max=VIEW-1;drawCrowd();}
+function custom(){active='';cur=0;recompute();}
+
+function start(saved){
+  saved=saved||{};
+  if(typeof saved.hOthers==='number')hOthers=saved.hOthers;
+  setPreset(PRESETS[1]);
+  if(saved.C&&typeof saved.C.N==='number'){C=saved.C;active=saved.active||'';}
+  if(typeof saved.cur==='number')cur=saved.cur;
+  heroStart();drawKnobs();recompute();
+}
+$('others').addEventListener('input',e=>{hOthers=+e.target.value;H.others=hOthers;drawHero();});
+$('rnd').onclick=()=>{if(H.stage==='pick'){heroPick(H,Math.floor(Math.random()*16));fresh=true;drawHero();}};
+$('next').onclick=()=>{heroNext(H);drawHero();};
+$('again').onclick=()=>{hSeed=(hSeed*7+3)%9973;heroStart();};
+$('kN').onchange=e=>{C.N=+e.target.value;custom();};
+$('kD').onchange=e=>{C.doors=+e.target.value;custom();};
+$('kB').onchange=e=>{C.bi=+e.target.value;custom();};
+$('kM').onchange=e=>{C.max=+e.target.value;custom();};
+$('scrub').addEventListener('input',e=>{cur=+e.target.value;drawCursor();});
+$('reroll').onclick=()=>{seed=(seed*31+7)%99991;recompute();};
+(function(){
+  const el=$('charts');let down=false;
+  const pick=e=>{const r=el.getBoundingClientRect();cur=Math.max(0,Math.min(VIEW-1,Math.floor((e.clientX-r.left)/r.width*VIEW)));drawCursor();};
+  el.addEventListener('pointerdown',e=>{down=true;pick(e);});
+  el.addEventListener('pointermove',e=>{if(down&&e.buttons)pick(e);});
+  window.addEventListener('pointerup',()=>{down=false;});
+})();
+const hot=window.claude&&window.claude.hot;
+if(hot&&hot.snapshot)hot.snapshot(()=>({hOthers,C,active,cur}));
+if(hot&&hot.ready)hot.ready(start);else start((hot&&hot.data)||{});
+</script>
+</body>
+</html>

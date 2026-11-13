@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beam Failure Recovery Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a room with four beam paths on top, and under it the three instruments MAC actually has:
+   a reading, a counter, a fuse. You are the obstacle. Same ink-on-fog system as the BSR and LCP labs. */
+:root{
+  --bg:#EDF0F4; --surface:#FFFFFF; --sunk:#E2E7EE; --ink:#0F1B2D; --muted:#566378; --line:#C9D2DD;
+  --accent:#2A5BD7; --bad:#C2334B; --good:#1B7F45; --warn:#A8690B;
+  --font-display:"Bricolage Grotesque","Arial Narrow",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+    --accent:#86A9FF; --bad:#FF7C90; --good:#5DD08C; --warn:#E7B04D;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+  --accent:#86A9FF; --bad:#FF7C90; --good:#5DD08C; --warn:#E7B04D;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--font-body)}
+a{color:var(--accent)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .small{font-size:13px}
+.top{display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between;align-items:center;padding:18px 0;font-size:14px}
+.top a{text-decoration:none;font-weight:500}
+.top .tag{font-family:var(--font-mono);font-size:12px;color:var(--muted);letter-spacing:.02em}
+.hero{padding:28px 0 8px}
+h1{font:800 clamp(32px,5.6vw,62px)/1.04 var(--font-display);letter-spacing:-.025em;margin:0 0 18px;text-wrap:balance}
+h1 em{font-style:normal;color:var(--bad)}
+.lede{max-width:64ch;font-size:18px;margin:0 0 26px}
+h2{font:800 clamp(26px,3.6vw,40px)/1.08 var(--font-display);letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance}
+h3{font:700 17px/1.25 var(--font-display);margin:0}
+section{padding:36px 0}
+p.intro{max-width:68ch;margin:0 0 22px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.eyebrow{font:600 12px/1.3 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.btn{appearance:none;border:1px solid var(--ink);background:var(--ink);color:var(--surface);border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--ink)}
+.chip{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:14px;cursor:pointer}
+.chip:hover{border-color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-family:var(--font-mono);font-size:14px;max-width:100%}
+
+.lab{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+/* stage */
+#stage{display:block;width:100%;height:auto;background:var(--sunk);border-radius:6px}
+.wall{stroke:var(--muted);stroke-width:3}
+.beam{fill:none;stroke:var(--muted);stroke-width:2;stroke-dasharray:3 6;stroke-linecap:round}
+.beam.cand{stroke:var(--ink);stroke-dasharray:none;stroke-width:2;opacity:.55}
+.beam.serv{stroke:var(--accent);stroke-dasharray:none;stroke-width:7;opacity:1}
+.beam.serv.down{stroke:var(--bad);stroke-dasharray:8 8}
+.beam.target{stroke:var(--good);stroke-dasharray:none;stroke-width:5;opacity:1;animation:pulse .5s ease-in-out infinite alternate}
+@keyframes pulse{from{opacity:.35}to{opacity:1}}
+.blk{fill:var(--ink)}
+.node{fill:var(--surface);stroke:var(--ink);stroke-width:2}
+.slabel{font:700 15px var(--font-mono);fill:var(--ink)}
+.blabel{font:700 14px var(--font-mono);fill:var(--surface)}
+.bdot{fill:var(--ink)}
+.hold{appearance:none;width:100%;border:2px solid var(--ink);background:var(--surface);border-radius:10px;padding:16px;font:700 18px/1.2 var(--font-display);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
+.hold.on{background:var(--ink);color:var(--surface)}
+.hold small{display:block;font:400 13px/1.3 var(--font-body);opacity:.75;margin-top:4px}
+.beams{display:flex;flex-direction:column;gap:8px}
+.brow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;font-size:14px}
+.brow .n{font:700 13px/1 var(--font-mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--surface)}
+.rs{position:relative;height:14px;background:var(--sunk);border-radius:3px}
+.rs i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--muted)}
+.rs.ok i{background:var(--ink)} .rs.serv i{background:var(--accent)} .rs.dead i{background:var(--bad)}
+.rs u{position:absolute;top:-3px;bottom:-3px;border-left:2px dashed var(--warn)}
+.tagc{font:500 12px/1 var(--font-mono);white-space:nowrap}
+/* instruments */
+.inst{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.inst > div{border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.inst b.big{font:600 20px/1.1 var(--font-mono)}
+.ok-t{color:var(--good)} .bad-t{color:var(--bad)}
+.pips{display:flex;gap:4px;flex-wrap:wrap}
+.pip{width:18px;height:18px;border-radius:50%;border:2px solid var(--line)}
+.pip.on{background:var(--bad);border-color:var(--bad)}
+.fuse{display:flex;gap:3px}
+.fuse i{flex:1;height:14px;border-radius:2px;background:var(--sunk);border:1px solid var(--line)}
+.fuse i.on{background:var(--warn);border-color:var(--warn)}
+.status{padding:14px;border-radius:8px;border-left:4px solid var(--good);background:var(--sunk)}
+.status.count{border-left-color:var(--warn)} .status.rec{border-left-color:var(--bad)}
+.status b{display:block;font:700 19px/1.2 var(--font-display);margin-bottom:4px}
+/* strip */
+.strip{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 10px;align-items:center;font-size:12px}
+.strip .lab-s{color:var(--muted);white-space:nowrap}
+.cells{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:1px;height:18px}
+.cells i{background:var(--sunk);border-radius:1px;font:600 10px/18px var(--font-mono);text-align:center;font-style:normal;color:var(--ink);overflow:hidden}
+.cells i.b{background:var(--ink)} .cells i.f{background:var(--bad)}
+.cells i.c{background:color-mix(in srgb,var(--warn) 45%,transparent)}
+.cells i.r{background:color-mix(in srgb,var(--bad) 55%,transparent)}
+.cells i.g{background:color-mix(in srgb,var(--good) 30%,transparent)}
+.stats{display:flex;flex-wrap:wrap;gap:10px 26px}
+.stats div{display:flex;flex-direction:column}
+.stats b{font:600 20px/1 var(--font-mono)}
+.stats span{font-size:12px;color:var(--muted)}
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px;min-height:150px}
+.log li{display:grid;grid-template-columns:8ch minmax(0,1fr);gap:8px}
+.log .tm{font-family:var(--font-mono);color:var(--muted);font-size:12px;padding-top:2px}
+.knobs{display:flex;flex-direction:column;gap:8px}
+.knobs label{display:flex;justify-content:space-between;align-items:center;gap:6px 12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.knobs code{font:600 12px/1.3 var(--font-mono);color:var(--accent);overflow-wrap:anywhere}
+.try{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:15px}
+
+.steps{counter-reset:s;list-style:none;margin:20px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;max-width:980px}
+.steps li{counter-increment:s;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px}
+.steps li::before{content:counter(s);font:800 28px/1 var(--font-display);color:var(--accent);min-width:1.2em}
+.steps p{margin:4px 0 0}
+.map{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.map > div{padding:14px 16px;border-top:1px solid var(--line)}
+.map > .mh{border-top:0;background:var(--sunk);font:600 12px/1.3 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.map code{font:600 14px/1.3 var(--font-mono);color:var(--accent);overflow-wrap:anywhere}
+.map b{display:block}
+.fine{border-top:1px solid var(--line);padding:28px 0 56px;font-size:14px;color:var(--muted)}
+.fine p{max-width:80ch;margin:0 0 10px}
+.fine strong{color:var(--ink)}
+@media (max-width:900px){
+  .lab{grid-template-columns:1fr}
+  .steps{grid-template-columns:1fr}
+  .map{grid-template-columns:1fr}
+  .map > .mh{display:none}
+  .map > div:nth-child(3n+1){background:var(--sunk)}
+}
+@media (max-width:560px){
+  .wrap{padding:0 16px}
+  .inst{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){.beam.target{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a href="https://3gpp.studio/index.html">← All experiments</a>
+    <span class="tag">MAC · TS 38.321 §5.17 · teaching model</span>
+  </header>
+</div>
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <h1>One bad reading is a blip.<br><em id="h1b">Three close together is a failure.</em></h1>
+    <p class="lede">At high frequencies a phone talks to the base station through one narrow beam, and a hand or a passing bus can cut it in milliseconds. The phone must tell a blip from a real loss, then find another beam by itself. Be the obstacle: block the beam and watch it decide.</p>
+
+    <div class="lab">
+      <div class="col">
+        <div class="panel">
+          <p class="eyebrow">The room · four beam paths between gNB and phone</p>
+          <svg id="stage" viewBox="0 0 600 230" role="img" aria-label="Four beam paths from the base station to the phone"></svg>
+          <div style="height:12px"></div>
+          <button class="hold" id="hold" aria-pressed="false">Hold to block the serving beam<small>Mouse, touch, or hold the space bar. A quick tap is one bad reading.</small></button>
+          <div class="chips" style="margin-top:12px">
+            <span class="small muted">Or play a pattern:</span>
+            <button class="chip" data-s="blip">Blip · 1 bad reading</button>
+            <button class="chip" data-s="flicker">Flicker · 1 bad in every 4</button>
+            <button class="chip" data-s="wall">Wall · stays blocked</button>
+          </div>
+        </div>
+        <div class="panel">
+          <p class="eyebrow">What the phone measures on each beam (L1-RSRP)</p>
+          <div class="beams" id="beams"></div>
+          <p class="small muted" style="margin:10px 0 0">The dashed line is <span class="num">rsrp-ThresholdSSB</span>. Only beams to the right of it qualify as candidates for a dedicated recovery attempt.</p>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="panel">
+          <div class="status" id="status"><b></b><span></span></div>
+          <div class="inst" style="margin-top:12px">
+            <div><span class="small muted">PHY reading, every 20 ms</span><b class="big" id="iRead"></b></div>
+            <div><span class="small muted">BFI_COUNTER</span><b class="big num" id="iCnt"></b><div class="pips" id="pips"></div></div>
+            <div><span class="small muted">Detection timer</span><b class="big num" id="iTim"></b><div class="fuse" id="fuse"></div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <p class="eyebrow">What the gNB configured</p>
+          <div class="knobs">
+            <label><code>beamFailureInstanceMaxCount</code><select id="kMax"></select></label>
+            <label><code>beamFailureDetectionTimer</code><select id="kTim"></select></label>
+            <label><code>rsrp-ThresholdSSB</code><select id="kThr"></select></label>
+          </div>
+        </div>
+        <div class="panel">
+          <p class="eyebrow">Last 48 readings · newest on the right</p>
+          <div class="strip">
+            <span class="lab-s">Blocked</span><div class="cells" id="rB"></div>
+            <span class="lab-s">Bad reading</span><div class="cells" id="rF"></div>
+            <span class="lab-s">Counter</span><div class="cells" id="rC"></div>
+            <span class="lab-s">Recovering</span><div class="cells" id="rR"></div>
+          </div>
+          <div class="stats" style="margin-top:14px">
+            <div><b id="sRec">0</b><span>recoveries started</span></div>
+            <div><b id="sOut">0 ms</b><span>with no working beam</span></div>
+            <div><b id="sRes">0</b><span>times the counter forgot</span></div>
+          </div>
+          <div class="chips" style="margin-top:12px">
+            <button class="btn ghost" id="pause">Pause</button>
+            <button class="btn ghost" id="clear">Start over</button>
+          </div>
+        </div>
+        <div class="panel">
+          <p class="eyebrow">What just happened</p>
+          <ul class="log" id="log" aria-live="polite"></ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <p class="eyebrow">Four things to try</p>
+      <ol class="try">
+        <li>Tap once. One bad reading is counted, and after enough quiet readings the counter forgets it.</li>
+        <li>Play Flicker. Then set the timer to <span class="num">pbfd3</span> and play it again. Same bad readings, opposite verdict.</li>
+        <li>Set the max count to <span class="num">n1</span> and tap. Every blip now costs a full recovery.</li>
+        <li>Set the threshold to <span class="num">−82 dBm</span> and play Wall. No beam qualifies, so the phone falls back to the slow shared procedure.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>The whole story, from zero</h2>
+    <ol class="steps">
+      <li><div><h3>The link is one beam</h3><p>At millimetre-wave frequencies the base station (gNB) aims a narrow beam at the phone. The beam in use is the serving beam. Others exist, often bouncing off walls, and are usually weaker.</p></div></li>
+      <li><div><h3>The phone keeps checking it</h3><p>Every few milliseconds the physical layer asks one question about the serving beam: could I still decode a control message on this? If the answer is no, it sends one beam failure instance up to MAC.</p></div></li>
+      <li><div><h3>MAC counts, and forgets</h3><p>Each instance adds 1 to <span class="num">BFI_COUNTER</span> and restarts a timer. If the timer runs out with no new instance, the counter goes back to 0. A good reading never clears the counter; only time does.</p></div></li>
+      <li><div><h3>Enough of them is a beam failure</h3><p>When the counter reaches <span class="num">beamFailureInstanceMaxCount</span>, MAC declares beam failure. Nothing has been fixed yet. This only starts the recovery.</p></div></li>
+      <li><div><h3>The phone picks a new beam and knocks</h3><p>It looks for a candidate beam stronger than <span class="num">rsrp-ThresholdSSB</span> and sends a random access preamble reserved for that beam. Which preamble arrives tells the gNB which beam the phone chose.</p></div></li>
+      <li><div><h3>The gNB answers on the new beam</h3><p>A control message for this phone, on a search space reserved for recovery, completes it. The counter resets and the link continues on the new beam, in the same cell. If no attempt ever succeeds, the heavier radio link failure handling takes over.</p></div></li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What each number is for</h2>
+    <p class="intro">The gNB picks these per phone and sends them by RRC. Together they set how jumpy detection is and how picky recovery is.</p>
+    <div class="map">
+      <div class="mh">The question</div><div class="mh">The knob</div><div class="mh">The trade</div>
+      <div><b>How many bad readings before acting?</b></div>
+      <div><code>beamFailureInstanceMaxCount</code><br><span class="small muted">n1 to n6, n8, n10</span></div>
+      <div>Low reacts fast but treats blips as failures, and each one costs a random access. High rides out blips but leaves the phone longer on a dead beam.</div>
+      <div><b>How long does one bad reading stay on the record?</b></div>
+      <div><code>beamFailureDetectionTimer</code><br><span class="small muted">pbfd1 to pbfd6, pbfd8, pbfd10, counted in reporting periods</span></div>
+      <div>Short forgets quickly, so scattered bad readings never add up. Long lets a flickering beam accumulate into a failure.</div>
+      <div><b>How good must a replacement beam be?</b></div>
+      <div><code>rsrp-ThresholdSSB</code><br><span class="small muted">with a list of candidate beams and their reserved preambles</span></div>
+      <div>Low accepts almost any beam and risks landing on a poor one. High may leave no candidate, and the phone must use contention-based random access instead.</div>
+      <div><b>How long may the reserved preambles be used?</b></div>
+      <div><code>beamFailureRecoveryTimer</code><br><span class="small muted">10 to 200 ms, optional</span></div>
+      <div>While it runs the phone may use its reserved, collision-free preambles. After it expires those are off limits. Not modelled in this lab.</div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="wrap fine">
+  <p><strong>What this lab simplifies.</strong> One cell, one set of detection reference signals, no DRX. A blocked beam is simply bad and an unblocked one good; there is no real radio channel. The reporting period is an illustrative 20 ms and the animation runs about 12 times slower than real time. Recovery takes a fixed 60 ms with a reserved preamble and 120 ms with the contention-based fallback; real timings depend on configuration, and retries, power ramping, back-off and beamFailureRecoveryTimer are not modelled. The phone here picks the strongest qualifying beam; the specification allows any qualifying one. When a bad reading lands exactly as the timer would expire, the reading is counted first, so <span class="num">pbfdN</span> tolerates N−1 quiet periods; the specification does not order those two events. SCell recovery (a MAC CE instead of random access) and two-TRP operation are out of scope.</p>
+  <p><strong>Sources.</strong> 3GPP TS 38.321 §5.17 (beam failure detection and recovery), §5.1 (random access for recovery). TS 38.213 §6 (link recovery). TS 38.331 RadioLinkMonitoringConfig and BeamFailureRecoveryConfig (value ranges). The specification is authoritative; this page is a teaching model. <a href="https://www.etsi.org/deliver/etsi_ts/138300_138399/138321/">Specification archive</a></p>
+</footer>
+
+<script id="engine">
+/* ---------- engine: no DOM in here ---------- */
+const P=20;                                   // ms per reporting period (illustrative)
+const RSRP=[-80,-88,-84,-97],BLOCKED_RSRP=-118;
+function newState(cfg){return {cfg,t:0,serving:0,blockedBeam:null,counter:0,since:null,phase:'ok',left:0,target:null,cbra:false,
+  hist:[],events:[],recoveries:0,outage:0,resets:0,declaredAt:0};}
+function rsrpOf(s,i){return s.blockedBeam===i?BLOCKED_RSRP:RSRP[i];}
+function pickCandidate(s){                    // strongest non-serving beam above the threshold, else null
+  let best=null;
+  for(let i=0;i<RSRP.length;i++){if(i===s.serving)continue;const r=rsrpOf(s,i);if(r>=s.cfg.thr&&(best===null||r>rsrpOf(s,best)))best=i;}
+  return best;
+}
+function strongestOther(s){let best=null;for(let i=0;i<RSRP.length;i++){if(i===s.serving)continue;if(best===null||rsrpOf(s,i)>rsrpOf(s,best))best=i;}return best;}
+function ev(s,kind,text){s.events.push({t:s.t*P,kind,text});if(s.events.length>40)s.events.shift();}
+function tick(s,blocked){
+  if(blocked){if(s.blockedBeam===null)s.blockedBeam=s.serving;}else s.blockedBeam=null;
+  const bfi=s.blockedBeam===s.serving;
+  if(s.phase==='ok'){
+    if(bfi){                                   // each instance: counter + 1, timer restarts
+      s.counter++;s.since=0;
+      if(s.counter>=s.cfg.max){
+        s.phase='search';s.left=1;s.recoveries++;s.declaredAt=s.t;
+        ev(s,'declared','Beam failure declared: BFI_COUNTER reached '+s.cfg.max+'. Recovery starts.');
+      }
+    }else if(s.since!==null){
+      s.since++;
+      if(s.since>=s.cfg.timer){                // timer expired with no new instance: counter back to 0
+        ev(s,'reset','Timer expired after '+s.cfg.timer+' quiet period'+(s.cfg.timer>1?'s':'')+'. BFI_COUNTER '+s.counter+' → 0.');
+        s.counter=0;s.since=null;s.resets++;
+      }
+    }
+  }else{
+    s.left--;
+    if(s.left<=0){
+      if(s.phase==='search'){
+        const c=pickCandidate(s);
+        if(c!==null){s.target=c;s.cbra=false;ev(s,'pick','Beam '+(c+1)+' is above the threshold ('+rsrpOf(s,c)+' dBm). Sending its reserved preamble.');}
+        else{s.target=strongestOther(s);s.cbra=true;ev(s,'fallback','No beam is above the threshold. Falling back to contention-based random access on beam '+(s.target+1)+'.');}
+        s.phase='prach';s.left=1;
+      }else if(s.phase==='prach'){s.phase='wait';s.left=s.cbra?4:1;}
+      else if(s.phase==='wait'){
+        s.serving=s.target;s.target=null;s.counter=0;s.since=null;s.phase='ok';
+        ev(s,'recovered','gNB answered. Now on beam '+(s.serving+1)+', '+((s.t-s.declaredAt)*P)+' ms after the failure was declared. BFI_COUNTER → 0.');
+      }
+    }
+  }
+  if(bfi||s.phase!=='ok')s.outage++;
+  s.hist.push({blocked:s.blockedBeam!==null,bfi,counter:s.counter,phase:s.phase});
+  if(s.hist.length>48)s.hist.shift();
+  s.t++;
+  return s;
+}
+if(typeof module!=='undefined')module.exports={P,RSRP,newState,tick,pickCandidate};
+</script>
+
+<script>
+/* ---------- view ---------- */
+const $=id=>document.getElementById(id);
+const WORD=['','One','Two','Three','Four','Five','Six','','Eight','','Ten'];
+const TICK_MS=240;
+const SCRIPTS={blip:[1,0],flicker:[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],wall:[1,1,1,1,1,1,1,1,1,1,1,1,1,1]};
+const PATHS=[[[60,115],[540,115]],[[60,115],[300,22],[540,115]],[[60,115],[300,208],[540,115]],[[60,115],[440,22],[540,115]]];
+const MID=[[300,115],[180,68],[180,162],[250,68]];
+let cfg={max:3,timer:4,thr:-90},S,queue=[],held=false,tapped=false,paused=false,timer=null;
+
+function fill(sel,vals,cur,lab){sel.innerHTML=vals.map(v=>'<option value="'+v+'"'+(v===cur?' selected':'')+'>'+lab(v)+'</option>').join('');}
+function drawStage(){
+  let h='<line class="wall" x1="20" y1="20" x2="580" y2="20"/><line class="wall" x1="20" y1="210" x2="580" y2="210"/>';
+  const order=[0,1,2,3].sort((a,b)=>(a===S.serving)-(b===S.serving));
+  order.forEach(i=>{
+    const d='M'+PATHS[i].map(p=>p.join(' ')).join(' L');
+    let cls='beam';const r=rsrpOf(S,i);
+    if(i===S.serving)cls+=' serv'+(S.blockedBeam===i?' down':'');
+    else if(S.target===i)cls+=' target';
+    else if(r>=cfg.thr)cls+=' cand';
+    h+='<path class="'+cls+'" d="'+d+'"/>';
+  });
+  [0,1,2,3].forEach(i=>{
+    const m=MID[i];
+    if(S.blockedBeam===i)h+='<rect class="blk" x="'+(m[0]-13)+'" y="'+(m[1]-26)+'" width="26" height="52" rx="5"/>';
+    const lx=i===0?420:i===1?300:i===2?300:440,ly=i===0?115:i===1?40:i===2?192:40;
+    h+='<circle class="bdot" cx="'+lx+'" cy="'+ly+'" r="12"/><text class="blabel" x="'+lx+'" y="'+(ly+5)+'" text-anchor="middle">'+(i+1)+'</text>';
+  });
+  h+='<rect class="node" x="34" y="85" width="26" height="60" rx="4"/><text class="slabel" x="47" y="165" text-anchor="middle">gNB</text>';
+  h+='<rect class="node" x="540" y="95" width="22" height="40" rx="5"/><text class="slabel" x="551" y="155" text-anchor="middle">phone</text>';
+  $('stage').innerHTML=h;
+}
+function pct(r){return Math.max(0,Math.min(100,(r+120)/45*100));}
+function drawBeams(){
+  $('beams').innerHTML=RSRP.map((_,i)=>{
+    const r=rsrpOf(S,i),serv=i===S.serving,blocked=S.blockedBeam===i,ok=r>=cfg.thr;
+    const cls=blocked?'dead':serv?'serv':ok?'ok':'';
+    const tag=blocked?'blocked':serv?'serving':S.target===i?'chosen':ok?'candidate':'too weak';
+    return '<div class="brow"><span class="n">'+(i+1)+'</span><div class="rs '+cls+'"><i style="width:'+pct(r)+'%"></i><u style="left:'+pct(cfg.thr)+'%"></u></div><span class="tagc">'+r+' dBm · '+tag+'</span></div>';
+  }).join('');
+}
+function drawInstruments(){
+  const badNow=S.blockedBeam===S.serving;
+  $('iRead').innerHTML=badNow?'<span class="bad-t">bad</span>':'<span class="ok-t">good</span>';
+  $('iCnt').textContent=S.counter+' / '+cfg.max;
+  let p='';for(let i=0;i<cfg.max;i++)p+='<span class="pip'+(i<S.counter?' on':'')+'"></span>';$('pips').innerHTML=p;
+  const left=S.since===null?0:cfg.timer-S.since;
+  $('iTim').textContent=S.phase!=='ok'?'paused':S.since===null?'not running':left*P+' ms left';
+  let f='';for(let i=0;i<cfg.timer;i++)f+='<i'+(S.phase==='ok'&&i<left?' class="on"':'')+'></i>';$('fuse').innerHTML=f;
+  const st=$('status');let t,d,c='';
+  if(S.phase==='search'){c='rec';t='Beam failure declared';d='Looking for a candidate beam above the threshold.';}
+  else if(S.phase==='prach'){c='rec';t=S.cbra?'Contention-based random access':'Preamble sent on beam '+(S.target+1);d=S.cbra?'No beam qualified, so the phone uses the shared preambles that every phone competes for.':'The preamble is reserved for this phone and this beam, so the gNB knows who is knocking and where.';}
+  else if(S.phase==='wait'){c='rec';t='Waiting for the gNB to answer';d='The phone listens on the new beam for a control message addressed to it.';}
+  else if(S.counter>0){c='count';t='Counting bad readings';d=S.counter+' of '+cfg.max+' on the record. '+(cfg.max-S.counter)+' more before the timer runs out and the beam is declared failed.';}
+  else{t='Beam '+(S.serving+1)+' is working';d='Counter at 0. Nothing on the record.';}
+  st.className='status '+c;st.firstElementChild.textContent=t;st.lastElementChild.textContent=d;
+}
+function drawStrip(){
+  const pad=48-S.hist.length,blank='<i></i>'.repeat(Math.max(0,pad));
+  $('rB').innerHTML=blank+S.hist.map(h=>'<i'+(h.blocked?' class="b"':'')+'></i>').join('');
+  $('rF').innerHTML=blank+S.hist.map(h=>'<i'+(h.bfi?' class="f"':'')+'></i>').join('');
+  $('rC').innerHTML=blank+S.hist.map(h=>'<i'+(h.counter?' class="c"':'')+'>'+(h.counter||'')+'</i>').join('');
+  $('rR').innerHTML=blank+S.hist.map(h=>'<i'+(h.phase!=='ok'?' class="r"':'')+'></i>').join('');
+  $('sRec').textContent=S.recoveries;$('sOut').textContent=(S.outage*P).toLocaleString('en-US')+' ms';$('sRes').textContent=S.resets;
+}
+let logSeen=-1;
+function drawLog(){
+  const e=S.events.slice(-5).reverse();
+  $('log').innerHTML=e.length?e.map(x=>'<li><span class="tm">'+x.t.toLocaleString('en-US')+' ms</span><span>'+x.text+'</span></li>').join(''):'<li><span class="tm">·</span><span class="muted">Nothing yet. Block the beam.</span></li>';
+}
+function drawAll(){drawStage();drawBeams();drawInstruments();drawStrip();drawLog();
+  $('h1b').textContent=cfg.max===1?'Here, one is already a failure.':WORD[cfg.max]+' close together is a failure.';}
+function step(){
+  let b;
+  if(queue.length)b=!!queue.shift();else b=held||tapped;
+  tapped=false;
+  tick(S,b);drawAll();
+}
+function run(){if(timer)clearInterval(timer);timer=paused?null:setInterval(step,TICK_MS);$('pause').textContent=paused?'Run':'Pause';}
+function prefill(){
+  S=newState(cfg);
+  [0,0,0,0,1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0].forEach(b=>tick(S,!!b));
+}
+function restart(keep){S=newState(cfg);queue=[];if(!keep)drawAll();}
+function setHeld(v){held=v;if(v)tapped=true;$('hold').classList.toggle('on',v);$('hold').setAttribute('aria-pressed',v);if(v)queue=[];}
+
+function start(saved){
+  saved=saved||{};
+  if(saved.cfg&&typeof saved.cfg.max==='number')cfg=saved.cfg;
+  fill($('kMax'),[1,2,3,4,5,6,8,10],cfg.max,v=>'n'+v);
+  fill($('kTim'),[1,2,3,4,5,6,8,10],cfg.timer,v=>'pbfd'+v+' · '+v*P+' ms');
+  fill($('kThr'),[-100,-90,-82],cfg.thr,v=>v+' dBm');
+  prefill();drawAll();
+  paused=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  run();
+}
+$('kMax').onchange=e=>{cfg.max=+e.target.value;S.cfg=cfg;if(S.phase==='ok'&&S.counter>=cfg.max)S.counter=cfg.max-1;drawAll();};
+$('kTim').onchange=e=>{cfg.timer=+e.target.value;S.cfg=cfg;drawAll();};
+$('kThr').onchange=e=>{cfg.thr=+e.target.value;S.cfg=cfg;drawAll();};
+const hb=$('hold');
+hb.addEventListener('pointerdown',e=>{e.preventDefault();try{hb.setPointerCapture(e.pointerId);}catch(_){}setHeld(true);});
+['pointerup','pointercancel','lostpointercapture'].forEach(n=>hb.addEventListener(n,()=>setHeld(false)));
+hb.addEventListener('keydown',e=>{if((e.key===' '||e.key==='Enter')&&!e.repeat){e.preventDefault();setHeld(true);}});
+hb.addEventListener('keyup',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();setHeld(false);}});
+hb.addEventListener('blur',()=>setHeld(false));
+hb.addEventListener('contextmenu',e=>e.preventDefault());
+document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{queue=SCRIPTS[b.dataset.s].slice();if(paused){paused=false;run();}});
+$('pause').onclick=()=>{paused=!paused;run();};
+$('clear').onclick=()=>restart(false);
+const hot=window.claude&&window.claude.hot;
+if(hot&&hot.snapshot)hot.snapshot(()=>({cfg}));
+if(hot&&hot.ready)hot.ready(start);else start((hot&&hot.data)||{});
+</script>
+</body>
+</html>

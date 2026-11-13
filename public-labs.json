@@ -1,3 +1,1 @@
-{
-  "labs": ["lcp", "bsr", "bfr", "cells-triggered-list"]
-}
+{"labs": ["lcp", "bsr", "bfr", "cells-triggered-list", "lcp-2", "bsr-2", "bfr-2", "sr", "random-access", "harq", "drx-lp-wus"]}

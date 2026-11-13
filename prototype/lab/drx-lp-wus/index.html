@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DRX and LP-WUS Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: one strip of time. Packets drop in at the top, the phone's awake windows sit at the bottom,
+   and every packet draws a line down to the moment it was delivered. A slanted line is a wait.
+   Same ink-on-fog system as the other MAC labs. */
+:root{
+  --bg:#EDF0F4; --surface:#FFFFFF; --sunk:#E2E7EE; --ink:#0F1B2D; --muted:#566378; --line:#C9D2DD;
+  --accent:#2A5BD7; --bad:#C2334B; --good:#1B7F45; --warn:#A8690B; --lp:#7650C9;
+  --font-display:"Bricolage Grotesque","Arial Narrow",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+    --accent:#86A9FF; --bad:#FF7C90; --good:#5DD08C; --warn:#E7B04D; --lp:#B79CFF;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+  --accent:#86A9FF; --bad:#FF7C90; --good:#5DD08C; --warn:#E7B04D; --lp:#B79CFF;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--font-body)}
+a{color:var(--accent)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .small{font-size:13px}
+.top{display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between;align-items:center;padding:18px 0;font-size:14px}
+.top a{text-decoration:none;font-weight:500}
+.top .tag{font-family:var(--font-mono);font-size:12px;color:var(--muted);letter-spacing:.02em}
+.hero{padding:28px 0 8px}
+h1{font:800 clamp(32px,5.6vw,62px)/1.04 var(--font-display);letter-spacing:-.025em;margin:0 0 18px;text-wrap:balance}
+h1 em{font-style:normal;color:var(--accent)}
+.lede{max-width:66ch;font-size:18px;margin:0 0 26px}
+h2{font:800 clamp(26px,3.6vw,40px)/1.08 var(--font-display);letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance}
+h3{font:700 17px/1.25 var(--font-display);margin:0}
+section{padding:36px 0}
+p.intro{max-width:68ch;margin:0 0 22px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.eyebrow{font:600 12px/1.3 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.btn{appearance:none;border:1px solid var(--ink);background:var(--ink);color:var(--surface);border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--ink)}
+.chip{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:14px;cursor:pointer;text-align:left}
+.chip:hover{border-color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-family:var(--font-mono);font-size:14px;max-width:100%}
+select:disabled{opacity:.4}
+
+.modes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.mode{appearance:none;text-align:left;border:2px solid var(--line);background:var(--surface);border-radius:10px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:4px}
+.mode:hover{border-color:var(--ink)}
+.mode b{font:700 16px/1.2 var(--font-display)}
+.mode span{font-size:13px;color:var(--muted)}
+.mode[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.row{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.look{margin:10px 0 0;max-width:84ch;font-size:15px}
+
+.tl{position:relative;margin-top:6px}
+#tl{display:block;width:100%;height:230px;background:var(--sunk);border-radius:6px;cursor:copy;touch-action:pan-y}
+.tl .lab{position:absolute;left:8px;font:500 11px/1 var(--font-mono);color:var(--muted);pointer-events:none;background:color-mix(in srgb,var(--sunk) 80%,transparent);padding:2px 4px;border-radius:3px}
+.xax{display:flex;justify-content:space-between;font:400 11px/1 var(--font-mono);color:var(--muted);margin-top:6px}
+.pk{fill:var(--ink)}
+.dl{fill:var(--good)} .dl.late{fill:var(--bad)}
+.wait{stroke:var(--good);stroke-width:1.5;vector-effect:non-scaling-stroke;opacity:.8}
+.wait.late{stroke:var(--bad)}
+.wait.pend{stroke:var(--bad);stroke-dasharray:3 3}
+.s-on{fill:var(--accent)} .s-in{fill:var(--accent);opacity:.45} .s-mon{fill:var(--lp)} .s-all{fill:var(--muted);opacity:.6}
+.s-skip{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.occ{fill:var(--lp);opacity:.3} .occ.sent{opacity:1}
+.grid{stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
+.lg{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--muted);margin-top:10px}
+.lg i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.lg i.sk{border:1.5px dashed var(--accent);background:none}
+
+.meters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+.meter{border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.meter .big{font:700 clamp(24px,3.4vw,34px)/1 var(--font-display)}
+.meter .big small{font:500 14px/1 var(--font-body);color:var(--muted)}
+.bar{position:relative;height:14px;background:var(--sunk);border-radius:3px}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--ink)}
+.bar i.ok{background:var(--good)} .bar i.no{background:var(--bad)}
+.bar u{position:absolute;top:-4px;bottom:-4px;border-left:2px dashed var(--warn)}
+.knobs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.knobs label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+.knobs code{font:600 12px/1.3 var(--font-mono);color:var(--accent);overflow-wrap:anywhere}
+.knobs label.off code{color:var(--muted)}
+.cmp{width:100%;border-collapse:collapse;font-size:14px}
+.cmp th{font:500 11px/1.2 var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;text-align:right;padding:6px 8px;border-bottom:1px solid var(--line)}
+.cmp th:first-child,.cmp td:first-child{text-align:left}
+.cmp td{padding:8px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.cmp td:first-child{font-family:var(--font-body)}
+.cmp tr.me td{font-weight:600;color:var(--accent)}
+.cmp .no{color:var(--bad)} .cmp .ok{color:var(--good)}
+.tablebox{overflow-x:auto}
+
+.steps{counter-reset:s;list-style:none;margin:20px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;max-width:980px}
+.steps li{counter-increment:s;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px}
+.steps li::before{content:counter(s);font:800 28px/1 var(--font-display);color:var(--accent);min-width:1.2em}
+.steps p{margin:4px 0 0}
+.map{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.map > div{padding:14px 16px;border-top:1px solid var(--line)}
+.map > .mh{border-top:0;background:var(--sunk);font:600 12px/1.3 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.map code{font:600 14px/1.3 var(--font-mono);color:var(--accent);overflow-wrap:anywhere}
+.map b{display:block}
+.fine{border-top:1px solid var(--line);padding:28px 0 56px;font-size:14px;color:var(--muted)}
+.fine p{max-width:80ch;margin:0 0 10px}
+.fine strong{color:var(--ink)}
+@media (max-width:900px){
+  .modes{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .knobs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .steps{grid-template-columns:1fr}
+  .map{grid-template-columns:1fr}
+  .map > .mh{display:none}
+  .map > div:nth-child(3n+1){background:var(--sunk)}
+}
+@media (max-width:560px){
+  .wrap{padding:0 16px}
+  .meters{grid-template-columns:1fr}
+  .modes{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a href="https://3gpp.studio/index.html">← All experiments</a>
+    <span class="tag">MAC · TS 38.321 §5.7 · teaching model</span>
+  </header>
+</div>
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <h1>Listening costs battery.<br><em>Sleeping costs delay.</em></h1>
+    <p class="lede">A connected phone has to keep checking whether the network has something for it, and that checking is what drains the radio. Discontinuous reception lets it sleep on an agreed schedule. A low-power wake-up signal lets it sleep until called. Send the phone some data and see when it actually arrives.</p>
+
+    <div class="panel">
+      <p class="eyebrow">How the phone listens</p>
+      <div class="modes" id="modes" role="group" aria-label="Listening mode"></div>
+
+      <div class="row" style="margin-top:16px">
+        <span class="small muted">Traffic for the phone:</span>
+        <div class="chips" id="traffic" role="group" aria-label="Traffic pattern"></div>
+        <label class="small muted" for="budget">This app tolerates a delay of
+          <select id="budget"></select></label>
+      </div>
+      <p class="look" id="look"></p>
+
+      <div class="tl">
+        <svg id="tl" preserveAspectRatio="none" role="img" aria-label="Timeline of packets arriving, the phone's awake windows and deliveries"></svg>
+        <span class="lab" style="top:6px">data arrives at the gNB · click anywhere to add a packet</span>
+        <span class="lab" style="top:126px">delivered to the phone</span>
+        <span class="lab" style="top:152px">main radio awake</span>
+        <span class="lab" id="lpLab" style="top:206px">wake-up receiver</span>
+      </div>
+      <div class="xax"><span>0 ms</span><span>400</span><span>800</span><span>1,200</span><span>1,600 ms</span></div>
+      <div class="lg">
+        <span><i style="background:var(--accent)"></i>on-duration</span>
+        <span><i style="background:var(--accent);opacity:.45"></i>kept awake by the inactivity timer</span>
+        <span><i class="sk"></i>on-duration skipped</span>
+        <span><i style="background:var(--lp)"></i>woken by LP-WUS</span>
+        <span><i style="background:var(--good)"></i>delivered in time</span>
+        <span><i style="background:var(--bad)"></i>late or still waiting</span>
+      </div>
+
+      <div class="meters">
+        <div class="meter">
+          <span class="small muted">Radio energy, compared with always listening</span>
+          <span class="big" id="mE"></span>
+          <div class="bar"><i id="mEb"></i></div>
+          <span class="small" id="mEs"></span>
+        </div>
+        <div class="meter">
+          <span class="small muted">Worst wait for a packet</span>
+          <span class="big" id="mD"></span>
+          <div class="bar"><i id="mDb"></i><u id="mDu"></u></div>
+          <span class="small" id="mDs"></span>
+        </div>
+      </div>
+
+      <p class="eyebrow" style="margin-top:18px">What the gNB configured</p>
+      <div class="knobs" id="knobs"></div>
+
+      <div class="row" style="margin-top:14px">
+        <button class="btn ghost" id="clear">Remove all packets</button>
+        <button class="btn ghost" id="undo">Remove the last packet</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <p class="eyebrow">Same traffic, same settings, all four ways</p>
+      <div class="tablebox"><table class="cmp" id="cmp"></table></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>The whole story, from zero</h2>
+    <ol class="steps">
+      <li><div><h3>Listening is the expensive part</h3><p>The base station (gNB) announces every transmission on a control channel. A phone that might receive something has to decode that channel every slot. Nearly always the answer is nothing for you, and the radio was powered for it anyway.</p></div></li>
+      <li><div><h3>DRX is an agreed sleeping schedule</h3><p>With discontinuous reception the phone wakes at the start of every cycle and listens for a short on-duration. The gNB knows the schedule, so it holds data for the phone until the next on-duration begins.</p></div></li>
+      <li><div><h3>Data keeps the phone up</h3><p>When something does arrive, more usually follows. Each new transmission restarts an inactivity timer, and the phone keeps listening until that timer runs out.</p></div></li>
+      <li><div><h3>Awake means any timer is running</h3><p>The phone listens whenever the on-duration timer or the inactivity timer is running. The specification calls this Active Time and adds a few more cases, such as waiting for a retransmission or for the answer to a scheduling request.</p></div></li>
+      <li><div><h3>A second, tiny receiver</h3><p>Even an empty on-duration costs a wake-up. A low-power wake-up receiver draws very little and listens only for one simple signal, the LP-WUS. While it listens, the main radio can stay asleep.</p></div></li>
+      <li><div><h3>Two ways to use it</h3><p>Together with the DRX cycle: before each on-duration the phone checks for an LP-WUS, and starts the on-duration only if it was called. Or on its own clock: the on-duration is not started at all, and an LP-WUS starts a separate monitoring timer whenever data shows up.</p></div></li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What each number is for</h2>
+    <p class="intro">The gNB picks these per phone and sends them by RRC. Every one of them moves the same two dials in opposite directions.</p>
+    <div class="map">
+      <div class="mh">The question</div><div class="mh">The knob</div><div class="mh">The trade</div>
+      <div><b>How often does the phone check in?</b></div>
+      <div><code>drx-LongCycle</code></div>
+      <div>The longest a packet can wait is about one cycle. A long cycle sleeps more and delays more.</div>
+      <div><b>How long does it listen each time?</b></div>
+      <div><code>drx-onDurationTimer</code></div>
+      <div>Long gives the gNB room to schedule many phones that wake together. Every millisecond of it is paid on every cycle, data or not.</div>
+      <div><b>After data, how long does it stay up?</b></div>
+      <div><code>drx-InactivityTimer</code></div>
+      <div>Long keeps a conversation flowing without waiting for the next cycle. Set longer than the gap between packets, the phone never sleeps at all.</div>
+      <div><b>Should an empty on-duration be skipped?</b></div>
+      <div>LP-WUS monitoring, without <code>lpwus-PDCCH-MonitoringTimer</code></div>
+      <div>The phone wakes only for cycles where it was called. Delay stays tied to the DRX cycle. If it could not listen for the signal, it starts the on-duration to be safe.</div>
+      <div><b>Should waking follow the data instead of the cycle?</b></div>
+      <div><code>lpwus-PDCCH-MonitoringTimer</code></div>
+      <div>The on-duration is not started. An LP-WUS starts this timer and the phone listens while it runs. Delay now depends on how often the wake-up receiver gets an occasion, not on the DRX cycle.</div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="wrap fine">
+  <p><strong>What this lab simplifies.</strong> Downlink only, one phone, one cell, one packet delivered per millisecond while awake. Energy is in made-up relative units: awake 100 per ms, asleep 1, wake-up receiver 1 more while the main radio sleeps, and 200 for each wake-up; real figures depend on the device and on how deeply it can sleep. With LP-WUS before the cycle, the occasion sits 3 ms ahead of the on-duration; on its own clock, the main radio starts listening 2 ms after the signal. Not modelled: the short DRX cycle, DRX command MAC CEs, HARQ round-trip and retransmission timers, uplink and scheduling requests (which also wake the phone), the older PDCCH-based wake-up indication (DCP), CSI reporting rules, two DRX groups, and LP-WUS in idle mode.</p>
+  <p><strong>Sources.</strong> 3GPP TS 38.321 Release 19, §5.7 (DRX, Active Time, LP-WUS indication and lpwus-PDCCH-MonitoringTimer). TS 38.213 (LP-WUS monitoring occasions). TS 38.331 DRX-Config (value ranges). The specification is authoritative; this page is a teaching model. <a href="https://www.etsi.org/deliver/etsi_ts/138300_138399/138321/">Specification archive</a></p>
+</footer>
+
+<script id="engine">
+/* ---------- engine: no DOM in here ---------- */
+const T=1600,OFF=3,WAKE=2,P_AWAKE=100,P_SLEEP=1,P_LPWUR=1,E_WAKE=200;
+function simulate(c,packets){                 // c: {mode:'always'|'drx'|'gate'|'own', L, D, I, W, M}; packets: sorted ms
+  const lp=c.mode==='gate'||c.mode==='own';
+  let on=0,inact=0,mon=0,monAt=-1,gateNext=null,prevAwake=false,energy=0,wakes=0,empty=0,winDeliv=0,pi=0;
+  const queue=[],segs=[],skips=[],occs=[],out=packets.map(a=>({a,d:null}));
+  let seg=null;
+  for(let t=0;t<T;t++){
+    while(pi<packets.length&&packets[pi]<=t){queue.push(pi);pi++;}
+    if(c.mode==='drx'&&t%c.L===0)on=c.D;
+    if(c.mode==='gate'&&t%c.L===0){
+      const go=t===0?queue.length>0:gateNext;
+      if(go)on=c.D;else skips.push({s:t,e:t+c.D});
+      gateNext=null;
+    }
+    if(c.mode==='own'&&t===monAt)mon=c.M;
+    const awake=c.mode==='always'||on>0||inact>0||mon>0;
+    if(c.mode==='gate'&&(t+OFF)%c.L===0){     // LP-WUS occasion just before the on-duration
+      if(awake){gateNext=true;occs.push({t,sent:false,missed:true});}       // could not monitor it: start on-duration anyway
+      else{gateNext=queue.length>0;occs.push({t,sent:gateNext});}
+    }
+    if(c.mode==='own'&&t%c.W===0&&!awake&&monAt<t){
+      const sent=queue.length>0;occs.push({t,sent});if(sent)monAt=t+WAKE;
+    }
+    let delivered=false;
+    if(awake&&queue.length){const i=queue.shift();out[i].d=t;delivered=true;}
+    const kind=c.mode==='always'?'all':on>0?'on':mon>0?'mon':'in';
+    if(awake){
+      if(!prevAwake){wakes++;energy+=c.mode==='always'&&t===0?0:E_WAKE;winDeliv=0;}
+      if(!seg||seg.k!==kind||seg.e!==t){seg={s:t,e:t+1,k:kind};segs.push(seg);}else seg.e=t+1;
+      if(delivered)winDeliv++;
+      energy+=P_AWAKE;
+    }else{
+      if(prevAwake&&winDeliv===0)empty++;
+      energy+=P_SLEEP+(lp?P_LPWUR:0);
+    }
+    prevAwake=awake;
+    if(on>0)on--;if(mon>0)mon--;
+    if(delivered)inact=c.I;else if(inact>0)inact--;
+  }
+  if(prevAwake&&winDeliv===0&&c.mode!=='always')empty++;
+  const done=out.filter(p=>p.d!==null),delays=done.map(p=>p.d-p.a);
+  const pending=out.filter(p=>p.d===null);
+  let worst=delays.length?Math.max(...delays):0;
+  pending.forEach(p=>{worst=Math.max(worst,T-p.a);});
+  return {segs,skips,occs,out,awakeMs:segs.reduce((a,s)=>a+s.e-s.s,0),energy,rel:energy/(T*P_AWAKE),wakes,empty,
+          worst,mean:delays.length?delays.reduce((a,b)=>a+b,0)/delays.length:0,pending:pending.length,n:packets.length};
+}
+if(typeof module!=='undefined')module.exports={simulate,T};
+</script>
+
+<script>
+/* ---------- view ---------- */
+const $=id=>document.getElementById(id);
+const fmt=n=>Math.round(n).toLocaleString('en-US');
+const MODES=[
+  {id:'always',name:'Always listening',desc:'No DRX. The radio never sleeps.'},
+  {id:'drx',name:'DRX',desc:'Wake every cycle for an on-duration.'},
+  {id:'gate',name:'DRX with LP-WUS',desc:'Wake for an on-duration only when called.'},
+  {id:'own',name:'LP-WUS on its own clock',desc:'No on-duration. A wake-up signal starts a monitoring timer.'}
+];
+const TRAFFIC=[
+  {id:'chat',label:'A few chat messages',budget:100,pk:[150,190,265,900,935,1310],
+   look:'Six messages in three small bursts. Watch the first message of each burst: it waits for the phone to wake, and the ones right behind it ride on the inactivity timer.'},
+  {id:'one',label:'One notification',budget:300,pk:[437],
+   look:'A single packet in 1.6 seconds. With plain DRX the phone wakes ten times for it and nine of those are for nothing. This is the case a wake-up signal was made for.'},
+  {id:'voice',label:'Voice: a frame every 20 ms',budget:40,pk:Array.from({length:80},(_,i)=>i*20+5),
+   look:'A steady frame every 20 ms. If the inactivity timer is longer than 20 ms it never runs out and the phone never sleeps. Try a 20 ms cycle with the inactivity timer at 0.'},
+  {id:'none',label:'Nothing at all',budget:100,pk:[],
+   look:'No data. Everything the radio spends now is pure overhead. Compare the four rows in the table below.'}
+];
+const OPTS={L:[20,40,80,160,320,640],D:[2,4,8,10,20,40],I:[0,10,20,40,80,200],W:[5,10,20,40,80,160],M:[4,10,20,40,80]};
+const KNOBS=[
+  {k:'L',code:'drx-LongCycle',modes:['drx','gate'],unit:' ms'},
+  {k:'D',code:'drx-onDurationTimer',modes:['drx','gate'],unit:' ms'},
+  {k:'I',code:'drx-InactivityTimer',modes:['drx','gate','own'],unit:' ms'},
+  {k:'W',code:'LP-WUS occasion every',modes:['own'],unit:' ms'},
+  {k:'M',code:'lpwus-PDCCH-MonitoringTimer',modes:['own'],unit:' ms'}
+];
+let cfg={mode:'drx',L:160,D:8,I:40,W:20,M:20},packets=TRAFFIC[0].pk.slice(),tid='chat',budget=100,sim;
+const H=230,Y={pk0:22,pk1:40,dl0:118,dl1:136,r0:150,r1:190,lp0:204,lp1:220};
+
+function drawModes(){
+  $('modes').innerHTML=MODES.map(m=>'<button class="mode" data-m="'+m.id+'" aria-pressed="'+(m.id===cfg.mode)+'"><b>'+m.name+'</b><span>'+m.desc+'</span></button>').join('');
+  $('modes').querySelectorAll('button').forEach(b=>b.onclick=()=>{cfg.mode=b.dataset.m;render();});
+}
+function drawTraffic(){
+  $('traffic').innerHTML=TRAFFIC.map(t=>'<button class="chip" data-t="'+t.id+'" aria-pressed="'+(t.id===tid)+'">'+t.label+'</button>').join('');
+  $('traffic').querySelectorAll('button').forEach(b=>b.onclick=()=>{const t=TRAFFIC.find(x=>x.id===b.dataset.t);tid=t.id;packets=t.pk.slice();budget=t.budget;render();});
+  $('budget').innerHTML=[20,40,100,300].map(v=>'<option value="'+v+'"'+(v===budget?' selected':'')+'>'+v+' ms</option>').join('');
+  const t=TRAFFIC.find(x=>x.id===tid);
+  $('look').textContent=t?t.look:'Your own traffic. Click the strip to add packets wherever you like.';
+}
+function drawKnobs(){
+  $('knobs').innerHTML=KNOBS.map(k=>{
+    const on=k.modes.indexOf(cfg.mode)>=0;
+    return '<label class="'+(on?'':'off')+'"><code>'+k.code+'</code><select id="k'+k.k+'"'+(on?'':' disabled')+'>'+OPTS[k.k].map(v=>'<option value="'+v+'"'+(v===cfg[k.k]?' selected':'')+'>'+v+k.unit+'</option>').join('')+'</select></label>';
+  }).join('');
+  KNOBS.forEach(k=>{$('k'+k.k).onchange=e=>{cfg[k.k]=+e.target.value;render();};});
+}
+function drawTimeline(){
+  const s=sim;let h='';
+  for(let x=200;x<T;x+=200)h+='<line class="grid" x1="'+x+'" y1="0" x2="'+x+'" y2="'+H+'"/>';
+  s.skips.forEach(k=>{h+='<rect class="s-skip" x="'+k.s+'" y="'+Y.r0+'" width="'+(k.e-k.s)+'" height="'+(Y.r1-Y.r0)+'"/>';});
+  s.segs.forEach(g=>{h+='<rect class="s-'+g.k+'" x="'+g.s+'" y="'+Y.r0+'" width="'+(g.e-g.s)+'" height="'+(Y.r1-Y.r0)+'"/>';});
+  s.occs.forEach(o=>{h+='<rect class="occ'+(o.sent?' sent':'')+'" x="'+(o.t-1)+'" y="'+Y.lp0+'" width="'+(o.sent?4:2)+'" height="'+(Y.lp1-Y.lp0)+'"/>';});
+  s.out.forEach(p=>{
+    const late=p.d===null||p.d-p.a>budget;
+    if(p.d===null)h+='<line class="wait pend" x1="'+p.a+'" y1="'+Y.pk1+'" x2="'+T+'" y2="'+Y.dl0+'"/>';
+    else h+='<line class="wait'+(late?' late':'')+'" x1="'+p.a+'" y1="'+Y.pk1+'" x2="'+p.d+'" y2="'+Y.dl0+'"/>'
+          +'<rect class="dl'+(late?' late':'')+'" x="'+(p.d-1.5)+'" y="'+Y.dl0+'" width="4" height="'+(Y.dl1-Y.dl0)+'"/>';
+    h+='<rect class="pk" x="'+(p.a-1.5)+'" y="'+Y.pk0+'" width="4" height="'+(Y.pk1-Y.pk0)+'"/>';
+  });
+  const el=$('tl');el.setAttribute('viewBox','0 0 '+T+' '+H);el.innerHTML=h;
+  $('lpLab').hidden=!(cfg.mode==='gate'||cfg.mode==='own');
+}
+function drawMeters(){
+  const s=sim,rel=s.rel;
+  $('mE').innerHTML=Math.round(rel*100)+'% <small>of always listening</small>';
+  $('mEb').style.width=Math.min(100,rel*100)+'%';
+  const useful=s.wakes-s.empty;
+  $('mEs').textContent=cfg.mode==='always'?'The radio was on for all 1,600 ms.'
+    :'Awake '+fmt(s.awakeMs)+' of 1,600 ms. Woke '+s.wakes+' time'+(s.wakes===1?'':'s')+(s.wakes?', '+s.empty+' of them for nothing.':'.');
+  const ok=s.n===0||(s.pending===0&&s.worst<=budget);
+  $('mD').innerHTML=s.n===0?'no data <small>to deliver</small>':fmt(s.worst)+' ms <small>'+(ok?'within':'over')+' the '+budget+' ms budget</small>';
+  const scale=Math.max(budget*2,s.worst,1);
+  const b=$('mDb');b.style.width=(s.n?Math.min(100,s.worst/scale*100):0)+'%';b.className=ok?'ok':'no';
+  $('mDu').style.left=(budget/scale*100)+'%';
+  $('mDs').textContent=s.n===0?'Nothing was sent.'
+    :(s.pending?s.pending+' packet'+(s.pending>1?'s were':' was')+' still waiting when the strip ended. ':'')+'Average wait '+fmt(s.mean)+' ms over '+(s.n-s.pending)+' delivered packet'+(s.n-s.pending===1?'':'s')+'.';
+}
+function drawCompare(){
+  let h='<thead><tr><th>Mode</th><th>Radio energy</th><th>Awake</th><th>Wake-ups for nothing</th><th>Worst wait</th></tr></thead><tbody>';
+  MODES.forEach(m=>{
+    const r=m.id===cfg.mode?sim:simulate(Object.assign({},cfg,{mode:m.id}),packets);
+    const ok=r.n===0||(r.pending===0&&r.worst<=budget);
+    h+='<tr'+(m.id===cfg.mode?' class="me"':'')+'><td>'+m.name+'</td><td>'+Math.round(r.rel*100)+'%</td><td>'+fmt(r.awakeMs)+' ms</td><td>'+(m.id==='always'?'n/a':r.empty+' of '+r.wakes)+'</td><td class="'+(ok?'ok':'no')+'">'+(r.n?fmt(r.worst)+' ms':'no data')+'</td></tr>';
+  });
+  $('cmp').innerHTML=h+'</tbody>';
+}
+function render(){
+  packets.sort((a,b)=>a-b);
+  sim=simulate(cfg,packets);
+  drawModes();drawTraffic();drawKnobs();drawTimeline();drawMeters();drawCompare();
+}
+$('tl').addEventListener('click',e=>{
+  const r=$('tl').getBoundingClientRect();const t=Math.max(0,Math.min(T-1,Math.round((e.clientX-r.left)/r.width*T)));
+  packets.push(t);lastAdded=t;tid='';render();
+});
+let lastAdded=null;
+$('budget').onchange=e=>{budget=+e.target.value;render();};
+$('clear').onclick=()=>{packets=[];tid='';render();};
+$('undo').onclick=()=>{if(!packets.length)return;const i=lastAdded!==null?packets.lastIndexOf(lastAdded):-1;packets.splice(i>=0?i:packets.length-1,1);lastAdded=null;tid='';render();};
+function start(saved){
+  saved=saved||{};
+  if(saved.cfg&&typeof saved.cfg.L==='number')cfg=saved.cfg;
+  if(Array.isArray(saved.packets)){packets=saved.packets;tid=saved.tid||'';}
+  if(typeof saved.budget==='number')budget=saved.budget;
+  render();
+}
+const hot=window.claude&&window.claude.hot;
+if(hot&&hot.snapshot)hot.snapshot(()=>({cfg,packets,tid,budget}));
+if(hot&&hot.ready)hot.ready(start);else start((hot&&hot.data)||{});
+</script>
+</body>
+</html>

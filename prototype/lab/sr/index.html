@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scheduling Request Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: the same strip of time as the DRX lab, seen from the phone. Data lands at the top, the one-bit
+   requests sit in the middle, grants come back at the bottom. A slanted line is the wait for permission. */
+:root{
+  --bg:#EDF0F4; --surface:#FFFFFF; --sunk:#E2E7EE; --ink:#0F1B2D; --muted:#566378; --line:#C9D2DD;
+  --accent:#2A5BD7; --bad:#C2334B; --good:#1B7F45; --warn:#A8690B; --lp:#7650C9;
+  --font-display:"Bricolage Grotesque","Arial Narrow",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+    --accent:#86A9FF; --bad:#FF7C90; --good:#5DD08C; --warn:#E7B04D; --lp:#B79CFF;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+  --accent:#86A9FF; --bad:#FF7C90; --good:#5DD08C; --warn:#E7B04D; --lp:#B79CFF;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--font-body)}
+a{color:var(--accent)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .small{font-size:13px}
+.top{display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between;align-items:center;padding:18px 0;font-size:14px}
+.top a{text-decoration:none;font-weight:500}
+.top .tag{font-family:var(--font-mono);font-size:12px;color:var(--muted);letter-spacing:.02em}
+.hero{padding:28px 0 8px}
+h1{font:800 clamp(32px,5.6vw,62px)/1.04 var(--font-display);letter-spacing:-.025em;margin:0 0 18px;text-wrap:balance}
+h1 em{font-style:normal;color:var(--accent)}
+.lede{max-width:66ch;font-size:18px;margin:0 0 26px}
+h2{font:800 clamp(26px,3.6vw,40px)/1.08 var(--font-display);letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance}
+h3{font:700 17px/1.25 var(--font-display);margin:0}
+section{padding:36px 0}
+p.intro{max-width:68ch;margin:0 0 22px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.eyebrow{font:600 12px/1.3 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.btn{appearance:none;border:1px solid var(--ink);background:var(--ink);color:var(--surface);border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--ink)}
+.chip{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:14px;cursor:pointer;text-align:left}
+.chip:hover{border-color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-family:var(--font-mono);font-size:14px;max-width:100%}
+select:disabled{opacity:.4}
+
+.modes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.mode{appearance:none;text-align:left;border:2px solid var(--line);background:var(--surface);border-radius:10px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:4px}
+.mode:hover{border-color:var(--ink)}
+.mode b{font:700 16px/1.2 var(--font-display)}
+.mode span{font-size:13px;color:var(--muted)}
+.mode[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.row{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.look{margin:10px 0 0;max-width:84ch;font-size:15px}
+
+.tl{position:relative;margin-top:6px}
+#tl{display:block;width:100%;height:230px;background:var(--sunk);border-radius:6px;cursor:copy;touch-action:pan-y}
+.tl .lab{position:absolute;left:8px;font:500 11px/1 var(--font-mono);color:var(--muted);pointer-events:none;background:color-mix(in srgb,var(--sunk) 80%,transparent);padding:2px 4px;border-radius:3px}
+.xax{display:flex;justify-content:space-between;font:400 11px/1 var(--font-mono);color:var(--muted);margin-top:6px}
+.pk{fill:var(--ink)}
+.dl{fill:var(--good)} .dl.late{fill:var(--bad)}
+.wait{stroke:var(--good);stroke-width:1.5;vector-effect:non-scaling-stroke;opacity:.8}
+.wait.late{stroke:var(--bad)}
+.wait.pend{stroke:var(--bad);stroke-dasharray:3 3}
+.s-on{fill:var(--accent)} .s-in{fill:var(--accent);opacity:.45} .s-mon{fill:var(--lp)} .s-all{fill:var(--muted);opacity:.6}
+.s-skip{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.occ{fill:var(--lp);opacity:.3} .occ.sent{opacity:1}
+.grid{stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
+.lg{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--muted);margin-top:10px}
+.lg i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.lg i.sk{border:1.5px dashed var(--accent);background:none}
+
+.meters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+.meter{border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.meter .big{font:700 clamp(24px,3.4vw,34px)/1 var(--font-display)}
+.meter .big small{font:500 14px/1 var(--font-body);color:var(--muted)}
+.bar{position:relative;height:14px;background:var(--sunk);border-radius:3px}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--ink)}
+.bar i.ok{background:var(--good)} .bar i.no{background:var(--bad)}
+.bar u{position:absolute;top:-4px;bottom:-4px;border-left:2px dashed var(--warn)}
+.knobs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.knobs label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+.knobs code{font:600 12px/1.3 var(--font-mono);color:var(--accent);overflow-wrap:anywhere}
+.knobs label.off code{color:var(--muted)}
+.cmp{width:100%;border-collapse:collapse;font-size:14px}
+.cmp th{font:500 11px/1.2 var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;text-align:right;padding:6px 8px;border-bottom:1px solid var(--line)}
+.cmp th:first-child,.cmp td:first-child{text-align:left}
+.cmp td{padding:8px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.cmp td:first-child{font-family:var(--font-body)}
+.cmp tr.me td{font-weight:600;color:var(--accent)}
+.cmp .no{color:var(--bad)} .cmp .ok{color:var(--good)}
+.tablebox{overflow-x:auto}
+
+.steps{counter-reset:s;list-style:none;margin:20px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;max-width:980px}
+.steps li{counter-increment:s;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px}
+.steps li::before{content:counter(s);font:800 28px/1 var(--font-display);color:var(--accent);min-width:1.2em}
+.steps p{margin:4px 0 0}
+.map{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.map > div{padding:14px 16px;border-top:1px solid var(--line)}
+.map > .mh{border-top:0;background:var(--sunk);font:600 12px/1.3 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.map code{font:600 14px/1.3 var(--font-mono);color:var(--accent);overflow-wrap:anywhere}
+.map b{display:block}
+.fine{border-top:1px solid var(--line);padding:28px 0 56px;font-size:14px;color:var(--muted)}
+.fine p{max-width:80ch;margin:0 0 10px}
+.fine strong{color:var(--ink)}
+@media (max-width:900px){
+  .modes{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .knobs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .steps{grid-template-columns:1fr}
+  .map{grid-template-columns:1fr}
+  .map > .mh{display:none}
+  .map > div:nth-child(3n+1){background:var(--sunk)}
+}
+@media (max-width:560px){
+  .wrap{padding:0 16px}
+  .meters{grid-template-columns:1fr}
+  .modes{grid-template-columns:1fr}
+}
+
+.sr-occ{fill:var(--muted);opacity:.35}
+.sr-ok{fill:var(--accent)} .sr-miss{fill:var(--bad)} .sr-dup{fill:var(--accent);opacity:.45}
+.proh{fill:var(--accent);opacity:.12}
+.ra{fill:var(--warn);opacity:.55}
+.gr{fill:var(--good)} .gr.waste{fill:none;stroke:var(--warn);stroke-width:1.5;vector-effect:non-scaling-stroke}
+.envs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 28px;margin-top:14px}
+.envs label{font-size:14px;font-weight:600;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.envs label span{font-family:var(--font-mono);font-weight:500}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0;height:28px}
+.log{list-style:none;margin:0;padding:0;columns:2;column-gap:28px;font-size:14px}
+.log li{display:grid;grid-template-columns:7ch minmax(0,1fr);gap:8px;break-inside:avoid;margin-bottom:4px}
+.log .tm{font-family:var(--font-mono);color:var(--muted);font-size:12px;padding-top:2px}
+.log .bad{color:var(--bad)} .log .good{color:var(--good)} .log .warn{color:var(--warn)}
+@media (max-width:900px){.log{columns:1}.envs{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a href="https://3gpp.studio/index.html">← All experiments</a>
+    <span class="tag">MAC · TS 38.321 §5.4.4 · teaching model</span>
+  </header>
+</div>
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <h1>Data to send, and no permission.<br><em>All the phone may send is one bit.</em></h1>
+    <p class="lede">A phone cannot transmit data until the base station grants it room. So when data shows up and there is no grant, it uses a tiny reserved slot to raise its hand. That is a scheduling request. Then it waits, asks again if nothing comes, and eventually gives up on asking politely. Give the phone some data and watch.</p>
+
+    <div class="panel">
+      <p class="eyebrow">What kind of day is it</p>
+      <div class="chips" id="presets" role="group" aria-label="Situations"></div>
+      <p class="look" id="look"></p>
+
+      <div class="tl">
+        <svg id="tl" preserveAspectRatio="none" role="img" aria-label="Timeline of data arriving, scheduling requests and grants"></svg>
+        <span class="lab" style="top:6px">data arrives in the phone · click anywhere to add some</span>
+        <span class="lab" style="top:104px">scheduling requests sent</span>
+        <span class="lab" style="top:176px">grants from the gNB</span>
+      </div>
+      <div class="xax"><span>0 ms</span><span>200</span><span>400</span><span>600</span><span>800 ms</span></div>
+      <div class="lg">
+        <span><i style="background:var(--muted);opacity:.35"></i>reserved slot, unused</span>
+        <span><i style="background:var(--accent)"></i>request heard</span>
+        <span><i style="background:var(--bad)"></i>request missed by the gNB</span>
+        <span><i style="background:var(--accent);opacity:.12;outline:1px solid var(--line)"></i>prohibit timer running</span>
+        <span><i style="background:var(--warn);opacity:.55"></i>random access fallback</span>
+        <span><i style="background:var(--good)"></i>grant used</span>
+        <span><i style="border:1.5px solid var(--warn);background:none"></i>grant wasted</span>
+      </div>
+
+      <div class="meters">
+        <div class="meter">
+          <span class="small muted">Worst wait from data to grant</span>
+          <span class="big" id="mD"></span>
+          <div class="bar"><i id="mDb"></i><u id="mDu"></u></div>
+          <span class="small" id="mDs"></span>
+        </div>
+        <div class="meter">
+          <span class="small muted">What the asking cost</span>
+          <span class="big" id="mC"></span>
+          <div class="bar"><i id="mCb"></i></div>
+          <span class="small" id="mCs"></span>
+        </div>
+      </div>
+
+      <p class="eyebrow" style="margin-top:18px">What the gNB configured</p>
+      <div class="knobs" id="knobs"></div>
+
+      <p class="eyebrow" style="margin-top:18px">What the phone cannot control</p>
+      <div class="envs">
+        <div><label for="eMiss">Requests the gNB fails to hear <span id="eMissV"></span></label><input type="range" id="eMiss" min="0" max="100" step="10"></div>
+        <div><label for="eReact">Time the gNB takes to answer one it heard <span id="eReactV"></span></label><input type="range" id="eReact" min="2" max="80" step="2"></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label class="small muted" for="budget">This app tolerates a wait of <select id="budget"></select></label>
+        <button class="btn ghost" id="luck">Run again with new luck</button>
+        <button class="btn ghost" id="clear">Remove all data</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <p class="eyebrow">What happened, in order</p>
+      <ul class="log" id="log"></ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>The whole story, from zero</h2>
+    <ol class="steps">
+      <li><div><h3>Uplink needs permission</h3><p>A phone sends data only inside a grant from the base station (gNB). When new data appears and it holds no grant, it has nothing to send the data in, and nothing to send a buffer report in either.</p></div></li>
+      <li><div><h3>A reserved slot to raise a hand</h3><p>The gNB sets aside a small recurring slot on the uplink control channel for each phone. The slot returns every few milliseconds whether it is used or not.</p></div></li>
+      <li><div><h3>The request is one bit</h3><p>In its next slot the phone sends a scheduling request. It says only that something is waiting. How much comes later, in the <a href="https://3gpp.studio/lab/bsr/">buffer status report</a>.</p></div></li>
+      <li><div><h3>Then it must hold still</h3><p>Sending starts a prohibit timer. Until that timer ends the phone may not ask again, which gives the gNB time to answer and keeps the control channel quiet.</p></div></li>
+      <li><div><h3>No grant yet: ask again and count</h3><p>If the timer ends and no grant has come, the phone asks again in the next slot. A counter tracks how many requests it has sent for this need.</p></div></li>
+      <li><div><h3>Too many unanswered: change channel</h3><p>When the counter reaches its limit, the phone concludes that its requests are not getting through. It gives up its reserved slots and starts <a href="https://claude.ai/artifact/8R3JVsTpBwMQRoKidQs3Vg">random access</a>, the same door a stranger would use.</p></div></li>
+    </ol>
+    <p class="intro" style="margin-top:22px">Once a grant arrives, the phone sends its data and a buffer report in it, and the pending request is cancelled. While a request is pending, the phone also stays awake to hear the answer, whatever its sleep schedule says.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What each number is for</h2>
+    <p class="intro">The gNB sets these per phone by RRC. A phone can have several request configurations, so urgent data can ask through a faster one.</p>
+    <div class="map">
+      <div class="mh">The question</div><div class="mh">The knob</div><div class="mh">The trade</div>
+      <div><b>How soon can the phone ask?</b></div>
+      <div>SR periodicity and offset<br><span class="small muted">from a couple of symbols to 640 slots</span></div>
+      <div>A short period means a short wait for the first request. Every slot is reserved for this one phone and sits empty most of the time, so a busy cell cannot give everyone a short one.</div>
+      <div><b>How long before it may ask again?</b></div>
+      <div><code>sr-ProhibitTimer</code><br><span class="small muted">1 to 128 ms</span></div>
+      <div>Shorter than the gNB's reaction time, the phone repeats itself before the answer can arrive, which wastes requests and can earn it a second grant it does not need. Much longer, and a missed request takes a long time to repair.</div>
+      <div><b>How many tries before giving up on asking?</b></div>
+      <div><code>sr-TransMax</code><br><span class="small muted">4, 8, 16, 32 or 64</span></div>
+      <div>Low falls back to random access quickly when the uplink is broken, and too readily on a merely bad day. High keeps a phone repeating requests nobody can hear.</div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="wrap fine">
+  <p><strong>What this lab simplifies.</strong> One phone, one request configuration, one slot per millisecond. Every grant is large enough to empty the buffer, so one grant ends the story; sizing grants is the job of the buffer status report. Whether the gNB hears a request is a coin flip at the rate you set. The random access fallback takes a fixed 60 ms and always works, and afterwards the reserved slots are assumed to be configured again. Not modelled: several request configurations and their mapping to logical channels, requests triggered by beam failure or other causes, the delay timer for low-priority data, overlap with other uplink transmissions, and DRX.</p>
+  <p><strong>Sources.</strong> 3GPP TS 38.321 §5.4.4 (scheduling request: SR_COUNTER, sr-ProhibitTimer, sr-TransMax, fallback to random access) and §5.4.5 (the buffer status report that triggers and cancels it). TS 38.331 SchedulingRequestConfig and SchedulingRequestResourceConfig (value ranges). The specification is authoritative; this page is a teaching model. <a href="https://www.etsi.org/deliver/etsi_ts/138300_138399/138321/">Specification archive</a></p>
+</footer>
+
+<script id="engine">
+/* ---------- engine: no DOM in here ---------- */
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const T=800,RA_MS=60;
+function simulate(c,arrivals){                 // c: {P, PH, MAXN, miss (0..1), react, seed}; arrivals: sorted ms
+  const r=rng(c.seed),srs=[],grants=[],ras=[],log=[],out=arrivals.map(a=>({a,g:null}));
+  let pending=false,counter=0,prohibitUntil=-1,raUntil=-1,heardOnce=false,ai=0;const waiting=[],due=[];
+  const serve=(t,kind)=>{
+    if(waiting.length){waiting.forEach(i=>out[i].g=t);const n=waiting.length;waiting.length=0;
+      grants.push({t,kind,waste:false});pending=false;heardOnce=false;
+      log.push({t,c:'good',text:(kind==='ra'?'Random access succeeded. ':'Grant arrives. ')+'The phone sends its data and a buffer report. Pending request cancelled.'});}
+    else{grants.push({t,kind,waste:true});log.push({t,c:'warn',text:'A second grant arrives for a request the phone repeated. Nothing left to send: wasted.'});}
+  };
+  for(let t=0;t<T;t++){
+    let fresh=false;
+    while(ai<arrivals.length&&arrivals[ai]<=t){waiting.push(ai);ai++;fresh=true;}
+    if(fresh&&!pending&&raUntil<0){pending=true;counter=0;heardOnce=false;log.push({t,c:'',text:'New data, no grant. A scheduling request is now pending. SR_COUNTER = 0.'});}
+    if(raUntil===t){raUntil=-1;serve(t,'ra');}
+    while(due.length&&due[0]<=t){due.shift();serve(t,'sr');}
+    if(t%c.P===0&&pending&&raUntil<0&&t>=prohibitUntil){
+      if(counter<c.MAXN){
+        counter++;const heard=r()>=c.miss,dup=heardOnce;
+        srs.push({t,n:counter,heard,dup});prohibitUntil=t+c.PH;
+        if(heard){due.push(t+c.react);due.sort((a,b)=>a-b);heardOnce=true;}
+        log.push({t,c:heard?'':'bad',text:'Request '+counter+' of '+c.MAXN+' sent. '+(heard?(dup?'Heard again: the gNB was already working on the first one.':'The gNB heard it.'):'The gNB missed it.')});
+      }else{
+        raUntil=t+RA_MS;ras.push({s:t,e:t+RA_MS});due.length=0;
+        log.push({t,c:'warn',text:'SR_COUNTER reached '+c.MAXN+'. The phone gives up its reserved slots and starts random access.'});
+      }
+    }
+  }
+  const done=out.filter(p=>p.g!==null),pend=out.filter(p=>p.g===null);
+  let worst=done.length?Math.max(...done.map(p=>p.g-p.a)):0;pend.forEach(p=>{worst=Math.max(worst,T-p.a);});
+  return {srs,grants,ras,log,out,worst,mean:done.length?done.reduce((a,p)=>a+p.g-p.a,0)/done.length:0,pending:pend.length,n:arrivals.length,
+          slots:Math.ceil(T/c.P),sent:srs.length,missed:srs.filter(s=>!s.heard).length,dup:srs.filter(s=>s.dup).length,
+          wasted:grants.filter(g=>g.waste).length,fallbacks:ras.length};
+}
+if(typeof module!=='undefined')module.exports={simulate,T};
+</script>
+
+<script>
+/* ---------- view ---------- */
+const $=id=>document.getElementById(id);
+const fmt=n=>Math.round(n).toLocaleString('en-US');
+const PRESETS=[
+  {id:'good',label:'A good day',env:{miss:0,react:8},look:'Every request is heard and answered in 8 ms. The wait is mostly the time until the next reserved slot. Try a longer period and watch it grow.'},
+  {id:'slow',label:'A slow gNB',env:{miss:0,react:40},look:'The gNB hears everything but takes 40 ms to answer. The prohibit timer is only 8 ms, so the phone repeats itself several times, and the repeats come back as grants it cannot use. Raise the prohibit timer above 40 ms.'},
+  {id:'edge',label:'Cell edge',env:{miss:0.5,react:8},look:'Half the requests are lost. Now a short prohibit timer helps: the sooner the phone may repeat, the sooner one gets through.'},
+  {id:'dead',label:'Uplink lost',env:{miss:1,react:8},look:'Nothing gets through. The counter climbs to its limit, and only then does the phone switch to random access. The time that takes is the period or the prohibit timer, whichever is longer, times the limit.'}
+];
+const OPTS={P:[1,2,5,10,20,40,80],PH:[1,2,4,8,16,32,64,128],MAXN:[4,8,16,32,64]};
+const KNOBS=[{k:'P',code:'SR periodicity',unit:' ms'},{k:'PH',code:'sr-ProhibitTimer',unit:' ms'},{k:'MAXN',code:'sr-TransMax',unit:''}];
+let cfg={P:10,PH:8,MAXN:8,miss:0,react:8,seed:3},arr=[63,301,312,566],pid='good',budget=40,sim;
+const H=210,Y={a0:22,a1:40,s0:120,s1:150,g0:172,g1:194};
+function drawPresets(){
+  $('presets').innerHTML=PRESETS.map(p=>'<button class="chip" data-p="'+p.id+'" aria-pressed="'+(p.id===pid)+'">'+p.label+'</button>').join('');
+  $('presets').querySelectorAll('button').forEach(b=>b.onclick=()=>{const p=PRESETS.find(x=>x.id===b.dataset.p);pid=p.id;cfg.miss=p.env.miss;cfg.react=p.env.react;render();});
+  const p=PRESETS.find(x=>x.id===pid);
+  $('look').textContent=p?p.look:'Your own conditions. Change the three numbers below and see which one matters here.';
+}
+function drawKnobs(){
+  $('knobs').innerHTML=KNOBS.map(k=>'<label><code>'+k.code+'</code><select id="k'+k.k+'">'+OPTS[k.k].map(v=>'<option value="'+v+'"'+(v===cfg[k.k]?' selected':'')+'>'+v+k.unit+'</option>').join('')+'</select></label>').join('');
+  KNOBS.forEach(k=>{$('k'+k.k).onchange=e=>{cfg[k.k]=+e.target.value;render();};});
+  $('eMiss').value=cfg.miss*100;$('eMissV').textContent=Math.round(cfg.miss*100)+'%';
+  $('eReact').value=cfg.react;$('eReactV').textContent=cfg.react+' ms';
+  $('budget').innerHTML=[20,40,100,300].map(v=>'<option value="'+v+'"'+(v===budget?' selected':'')+'>'+v+' ms</option>').join('');
+}
+function drawTimeline(){
+  const s=sim;let h='';
+  for(let x=100;x<T;x+=100)h+='<line class="grid" x1="'+x+'" y1="0" x2="'+x+'" y2="'+H+'"/>';
+  if(cfg.P>=5)for(let t=0;t<T;t+=cfg.P)h+='<rect class="sr-occ" x="'+t+'" y="'+(Y.s0+10)+'" width="1" height="'+(Y.s1-Y.s0-10)+'"/>';
+  else h+='<rect class="sr-occ" x="0" y="'+(Y.s0+22)+'" width="'+T+'" height="'+(Y.s1-Y.s0-22)+'"/>';
+  s.ras.forEach(r=>{h+='<rect class="ra" x="'+r.s+'" y="'+Y.s0+'" width="'+(Math.min(T,r.e)-r.s)+'" height="'+(Y.s1-Y.s0)+'"/>';});
+  s.srs.forEach(q=>{h+='<rect class="proh" x="'+q.t+'" y="'+Y.s0+'" width="'+Math.min(cfg.PH,T-q.t)+'" height="'+(Y.s1-Y.s0)+'"/>';});
+  s.srs.forEach(q=>{h+='<rect class="'+(q.heard?(q.dup?'sr-dup':'sr-ok'):'sr-miss')+'" x="'+(q.t-0.5)+'" y="'+Y.s0+'" width="3" height="'+(Y.s1-Y.s0)+'"/>';});
+  s.grants.forEach(g=>{h+='<rect class="gr'+(g.waste?' waste':'')+'" x="'+(g.t-1)+'" y="'+Y.g0+'" width="4" height="'+(Y.g1-Y.g0)+'"/>';});
+  s.out.forEach(p=>{
+    const late=p.g===null||p.g-p.a>budget;
+    h+='<line class="wait'+(p.g===null?' pend':late?' late':'')+'" x1="'+p.a+'" y1="'+Y.a1+'" x2="'+(p.g===null?T:p.g)+'" y2="'+(p.g===null?Y.s0:Y.g0)+'"/>';
+    h+='<rect class="pk" x="'+(p.a-1)+'" y="'+Y.a0+'" width="3" height="'+(Y.a1-Y.a0)+'"/>';
+  });
+  const el=$('tl');el.setAttribute('viewBox','0 0 '+T+' '+H);el.style.height=H+'px';el.innerHTML=h;
+}
+function drawMeters(){
+  const s=sim,ok=s.n===0||(s.pending===0&&s.worst<=budget);
+  $('mD').innerHTML=s.n===0?'no data <small>to send</small>':fmt(s.worst)+' ms <small>'+(ok?'within':'over')+' the '+budget+' ms budget</small>';
+  const scale=Math.max(budget*2,s.worst,1),b=$('mDb');
+  b.style.width=(s.n?Math.min(100,s.worst/scale*100):0)+'%';b.className=ok?'ok':'no';$('mDu').style.left=(budget/scale*100)+'%';
+  $('mDs').textContent=s.n===0?'Nothing was waiting.':(s.pending?s.pending+' still waiting when the strip ended. ':'')+'Average wait '+fmt(s.mean)+' ms.';
+  $('mC').innerHTML=s.sent+' request'+(s.sent===1?'':'s')+' <small>in '+s.slots+' reserved slots</small>';
+  $('mCb').style.width=Math.min(100,s.sent/Math.max(1,s.slots)*100)+'%';
+  const parts=[];
+  if(s.missed)parts.push(s.missed+' missed');
+  if(s.dup)parts.push(s.dup+' repeated needlessly');
+  if(s.wasted)parts.push(s.wasted+' grant'+(s.wasted>1?'s':'')+' wasted');
+  if(s.fallbacks)parts.push(s.fallbacks+' fallback'+(s.fallbacks>1?'s':'')+' to random access');
+  $('mCs').textContent=(parts.length?parts.join(', ')+'. ':'')+(s.slots-s.sent)+' reserved slots went unused.';
+}
+function drawLog(){
+  const e=sim.log.slice(0,16);
+  $('log').innerHTML=e.length?e.map(x=>'<li><span class="tm">'+x.t+' ms</span><span class="'+x.c+'">'+x.text+'</span></li>').join('')+(sim.log.length>16?'<li><span class="tm">…</span><span class="muted">'+(sim.log.length-16)+' more events.</span></li>':'')
+    :'<li><span class="tm">·</span><span class="muted">Nothing yet. Click the strip to give the phone some data.</span></li>';
+}
+function render(){arr.sort((a,b)=>a-b);sim=simulate(cfg,arr);drawPresets();drawKnobs();drawTimeline();drawMeters();drawLog();}
+$('tl').addEventListener('click',e=>{const r=$('tl').getBoundingClientRect();arr.push(Math.max(0,Math.min(T-1,Math.round((e.clientX-r.left)/r.width*T))));render();});
+$('eMiss').addEventListener('input',e=>{cfg.miss=+e.target.value/100;pid='';render();});
+$('eReact').addEventListener('input',e=>{cfg.react=+e.target.value;pid='';render();});
+$('budget').onchange=e=>{budget=+e.target.value;render();};
+$('luck').onclick=()=>{cfg.seed=(cfg.seed*31+7)%99991;render();};
+$('clear').onclick=()=>{arr=[];render();};
+function start(saved){
+  saved=saved||{};
+  if(saved.cfg&&typeof saved.cfg.P==='number')cfg=saved.cfg;
+  if(Array.isArray(saved.arr))arr=saved.arr;
+  if(typeof saved.pid==='string')pid=saved.pid;
+  if(typeof saved.budget==='number')budget=saved.budget;
+  render();
+}
+const hot=window.claude&&window.claude.hot;
+if(hot&&hot.snapshot)hot.snapshot(()=>({cfg,arr,pid,budget}));
+if(hot&&hot.ready)hot.ready(start);else start((hot&&hot.data)||{});
+</script>
+</body>
+</html>

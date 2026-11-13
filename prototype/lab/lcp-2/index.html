@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Logical Channel Prioritization Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: every grant is one bar, filled left to right in the order LCP pays it.
+   Solid = promised bytes (pass 1), hatched = leftovers (pass 2). Same ink-on-fog system as the BSR lab;
+   the three channel colours carry all the meaning. */
+:root{
+  --bg:#EDF0F4; --surface:#FFFFFF; --sunk:#E2E7EE; --ink:#0F1B2D; --muted:#566378; --line:#C9D2DD;
+  --accent:#2A5BD7; --a:#D4472A; --b:#0B8A7C; --c:#7650C9; --bad:#C2334B; --good:#1B7F45;
+  --font-display:"Bricolage Grotesque","Arial Narrow",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+    --accent:#86A9FF; --a:#FF8259; --b:#45D1BF; --c:#B79CFF; --bad:#FF7C90; --good:#5DD08C;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+  --accent:#86A9FF; --a:#FF8259; --b:#45D1BF; --c:#B79CFF; --bad:#FF7C90; --good:#5DD08C;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--font-body)}
+a{color:var(--accent)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.top{display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between;align-items:center;padding:18px 0;font-size:14px}
+.top a{text-decoration:none;font-weight:500}
+.top .tag{font-family:var(--font-mono);font-size:12px;color:var(--muted);letter-spacing:.02em}
+.hero{padding:28px 0 8px}
+h1{font:800 clamp(32px,5.6vw,62px)/1.04 var(--font-display);letter-spacing:-.025em;margin:0 0 18px;text-wrap:balance}
+h1 em{font-style:normal;color:var(--accent)}
+.lede{max-width:64ch;font-size:18px;margin:0 0 26px}
+h2{font:800 clamp(26px,3.6vw,40px)/1.08 var(--font-display);letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance}
+h3{font:700 17px/1.25 var(--font-display);margin:0}
+section{padding:36px 0}
+p.intro{max-width:68ch;margin:0 0 22px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.eyebrow{font:600 12px/1.3 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.btn{appearance:none;border:1px solid var(--ink);background:var(--ink);color:var(--surface);border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--ink)}
+.chip{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:14px;cursor:pointer;text-align:left}
+.chip:hover{border-color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0;height:28px}
+select{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-family:var(--font-mono);font-size:14px;max-width:100%}
+.sw{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.bg-a{background:var(--a)} .bg-b{background:var(--b)} .bg-c{background:var(--c)}
+
+/* the fill bar: one grant, paid in order */
+.fill{display:flex;height:44px;border-radius:6px;overflow:hidden;background:var(--sunk);border:1px solid var(--line)}
+.seg{min-width:0;display:grid;place-items:center;font:600 12px/1 var(--font-mono);color:#fff;overflow:hidden;white-space:nowrap;transition:flex-grow .18s ease-out}
+.seg.a{background:var(--a)} .seg.b{background:var(--b)} .seg.c{background:var(--c)}
+.seg.t2{background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(255,255,255,.42) 5px 8px)}
+.seg.none{background:transparent;color:var(--muted);font-weight:400}
+:root[data-theme="dark"] .seg,:root:not([data-theme="light"]) .seg{color:#0B121E}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .seg{color:#fff}}
+:root[data-theme="light"] .seg{color:#fff}
+.seg.none{color:var(--muted)!important}
+.fill-key{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;margin-top:8px;color:var(--muted)}
+.fill-key i{display:inline-block;width:18px;height:10px;border-radius:2px;margin-right:6px;background:var(--muted);vertical-align:-1px}
+.fill-key i.h{background-image:repeating-linear-gradient(135deg,transparent 0 4px,var(--surface) 4px 6px)}
+.claims{width:100%;border-collapse:collapse;margin-top:14px;font-size:14px}
+.claims th{font:500 11px/1.2 var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;text-align:right;padding:6px 8px;border-bottom:1px solid var(--line)}
+.claims th:nth-child(-n+2),.claims td:nth-child(-n+2){text-align:left}
+.claims td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.claims td:nth-child(2){font-family:var(--font-body)}
+.claims tr.zero td{color:var(--muted)}
+.claims tr.passrow td{font:600 12px/1.2 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--sunk);text-align:left}
+.claims .short{color:var(--bad);font-family:var(--font-body);font-size:12px;display:block}
+.tablebox{overflow-x:auto}
+.say{margin:14px 0 0;padding:12px;border-left:3px solid var(--ink);background:var(--sunk);border-radius:0 6px 6px 0;font-size:15px;max-width:80ch}
+
+.hero-top{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.who{border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px}
+.who b{display:block;font-family:var(--font-display);font-size:16px}
+.slrow{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;margin-bottom:12px}
+.slrow label{font-weight:600}
+.slrow output{font:600 18px/1 var(--font-mono);min-width:8ch;text-align:right}
+
+/* simulator */
+.look{margin:12px 0 18px;max-width:80ch;font-size:15px}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.card{display:flex;flex-direction:column;gap:10px;border-top-width:4px}
+.card.a{border-top-color:var(--a)} .card.b{border-top-color:var(--b)} .card.c{border-top-color:var(--c)}
+.card .tag5{font:500 11px/1 var(--font-mono);color:var(--muted)}
+.rowlab{font:600 11px/1.2 var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:4px 0 -4px}
+.knobs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.knobs label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.verdicts{display:flex;flex-direction:column;gap:6px;margin-top:auto;padding-top:10px;border-top:1px dashed var(--line)}
+.v{display:flex;gap:8px;align-items:baseline;font-size:14px}
+.v .mark{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font:700 12px/1 var(--font-mono);color:var(--surface);background:var(--good);transform:translateY(3px)}
+.v.bad .mark{background:var(--bad)}
+.v.info .mark{background:var(--muted)}
+.v b{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.grantstrip{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 28px;margin:14px 0}
+.grantstrip .g{display:flex;flex-direction:column;gap:2px}
+.grantstrip label{font-size:14px;font-weight:600;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.grantstrip label span{font-family:var(--font-mono);font-weight:500}
+.fund{grid-column:1/-1;font-size:14px;margin:0}
+.fund b.ok{color:var(--good)} .fund b.no{color:var(--bad)}
+.charts{position:relative;cursor:crosshair;touch-action:pan-y;user-select:none}
+.charts svg{display:block;width:100%}
+#mainChart{height:170px;background:var(--sunk);border-radius:4px}
+.lane{height:40px;background:var(--sunk);border-radius:4px}
+.lanelab{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin:10px 0 3px;flex-wrap:wrap}
+.cursor{position:absolute;top:0;bottom:0;width:0;border-left:2px solid var(--ink);pointer-events:none}
+.ymax{position:absolute;left:6px;top:4px;font:400 10px/1 var(--font-mono);color:var(--muted);pointer-events:none}
+.xax{display:flex;justify-content:space-between;font:400 11px/1 var(--font-mono);color:var(--muted);margin-top:6px}
+.f-a{fill:var(--a)} .f-b{fill:var(--b)} .f-c{fill:var(--c)}
+.t2{opacity:.42}
+.dipzone{fill:var(--ink);opacity:.07}
+.s-a{stroke:var(--a);fill:var(--a)} .s-b{stroke:var(--b);fill:var(--b)} .s-c{stroke:var(--c);fill:var(--c)}
+.lane path{fill-opacity:.25;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.scrub{display:flex;gap:12px;align-items:center;margin-top:10px}
+.detail{margin-top:14px}
+.dhead{display:flex;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;align-items:baseline;margin-bottom:10px}
+
+/* map */
+.map{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.map > div{padding:14px 16px;border-top:1px solid var(--line)}
+.map > .mh{border-top:0;background:var(--sunk);font:600 12px/1.3 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.map code{font:600 14px/1.3 var(--font-mono);color:var(--accent)}
+.map .none{color:var(--muted);font-style:italic}
+.map b{display:block}
+.felt{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;max-width:980px;margin-top:20px}
+.felt p{margin:4px 0 0}
+.fine{border-top:1px solid var(--line);padding:28px 0 56px;font-size:14px;color:var(--muted)}
+.fine p{max-width:80ch;margin:0 0 10px}
+.fine strong{color:var(--ink)}
+@media (max-width:900px){
+  .cards{grid-template-columns:1fr}
+  .map{grid-template-columns:1fr}
+  .map > .mh{display:none}
+  .map > div:nth-child(3n+1){background:var(--sunk)}
+  .felt{grid-template-columns:1fr}
+  .grantstrip{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  .wrap{padding:0 16px}
+  .hero-top{grid-template-columns:1fr}
+  .slrow{grid-template-columns:1fr auto}
+  .slrow input{grid-column:1/-1;grid-row:2}
+}
+@media (prefers-reduced-motion:reduce){.seg{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a href="https://3gpp.studio/index.html">← All experiments</a>
+    <span class="tag">MAC · TS 38.321 §5.4.3.1 · teaching model</span>
+  </header>
+</div>
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <h1>Priority says who goes first.<br><em>PBR says for how many bytes.</em></h1>
+    <p class="lede">The gNB grants uplink bytes to the phone as one lump, with no names on them. Logical Channel Prioritization is the rule the phone must follow to split that lump between its queues. It pays in two passes: first each channel's promised bytes, in rank order; then whatever is left, in rank order again.</p>
+
+    <div class="panel">
+      <p class="eyebrow">One grant, three queues</p>
+      <div class="hero-top">
+        <div class="who"><b><i class="sw bg-a"></i>Voice call</b>rank 1 · <span class="num">160 B</span> waiting · <span class="num">160 B</span> promised</div>
+        <div class="who"><b><i class="sw bg-b"></i>Live video</b>rank 2 · <span class="num">1,900 B</span> waiting · <span class="num">640 B</span> promised</div>
+        <div class="who"><b><i class="sw bg-c"></i>Photo backup</b>rank 3 · <span class="num">5,000 B</span> waiting · <span class="num">320 B</span> promised</div>
+      </div>
+      <div class="slrow">
+        <label for="heroG">Size of this grant</label>
+        <input type="range" id="heroG" min="0" max="3000" step="20" value="1500">
+        <output id="heroGv" for="heroG">1,500 B</output>
+      </div>
+      <div id="heroRun"></div>
+    </div>
+  </div>
+</section>
+
+<section id="run">
+  <div class="wrap">
+    <h2>Now run it for one second</h2>
+    <p class="intro">A grant arrives every 10 ms, and the signal dips for a while in the middle. Each channel carries a flow with a need from the core network, three numbers the gNB configured to meet it, and a result. Change the numbers and watch the result.</p>
+
+    <div class="chips" id="presets" role="group" aria-label="Experiments"></div>
+    <p class="look" id="look"></p>
+
+    <div class="cards" id="cards"></div>
+
+    <div class="panel" style="margin-top:14px">
+      <p class="eyebrow">What the gNB grants</p>
+      <div class="grantstrip">
+        <div class="g"><label for="gGood">Normal grant, every 10 ms <span id="gGoodV"></span></label><input type="range" id="gGood" min="300" max="3000" step="50"></div>
+        <div class="g"><label for="gDip">Grant during the dip, 300 to 500 ms <span id="gDipV"></span></label><input type="range" id="gDip" min="0" max="3000" step="50"></div>
+        <p class="fund" id="fund"></p>
+      </div>
+
+      <p class="eyebrow" style="margin-top:6px">Who got each grant · solid = promised (pass 1) · pale = leftovers (pass 2)</p>
+      <div class="charts" id="charts">
+        <svg id="mainChart" preserveAspectRatio="none" role="img" aria-label="Bytes sent per channel in each of 100 grants"></svg>
+        <span class="ymax" id="ymax"></span>
+        <div id="lanes"></div>
+        <div class="cursor" id="cursor"></div>
+      </div>
+      <div class="xax"><span>0 ms</span><span>250</span><span>500</span><span>750</span><span>1,000 ms</span></div>
+      <div class="scrub">
+        <button class="btn ghost" id="playBtn">Play</button>
+        <input type="range" id="scrub" min="0" max="99" step="1" value="50" aria-label="Pick a grant to inspect">
+      </div>
+
+      <div class="detail">
+        <div class="dhead"><h3 id="dTitle"></h3><span class="small muted">Click or drag on the chart to inspect any grant</span></div>
+        <div id="dRun"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Where the three numbers come from</h2>
+    <p class="intro">The core network describes what each QoS flow needs. The gNB turns that into three numbers per logical channel and sends them by RRC. The phone only runs the procedure. The translation in the middle is the gNB's own design; the specification defines the knobs and the procedure, not the mapping.</p>
+    <div class="map">
+      <div class="mh">The flow's need (core network)</div><div class="mh">The knob (RRC, per logical channel)</div><div class="mh">What it does in LCP</div>
+
+      <div><b>How urgent is it, next to the others?</b><span class="small muted">5QI priority level, delay budget</span></div>
+      <div><code>priority</code><br><span class="small muted">1 to 16. Lower number goes first.</span></div>
+      <div>Sets the order inside each pass. Nothing more.</div>
+
+      <div><b>What rate was it promised?</b><span class="small muted">GFBR for a GBR flow. For a non-GBR flow, a small floor so it cannot starve.</span></div>
+      <div><code>prioritisedBitRate</code><br><span class="small muted">0 to 65,536 kB/s, or infinity. kB means kilobytes.</span></div>
+      <div>Sets how many bytes per second ride in pass 1, ahead of every channel's leftovers. Infinity puts all of the channel's data in pass 1.</div>
+
+      <div><b>Over how long may the promise be averaged?</b><span class="small muted">Bursty sources, gaps between grants</span></div>
+      <div><code>bucketSizeDuration</code><br><span class="small muted">5 ms to 1 s</span></div>
+      <div>Caps unspent promise at PBR × BSD. A channel that was idle or shortchanged can collect that much back pay later.</div>
+
+      <div><b>How late may a packet be?</b><span class="small muted">Packet delay budget</span></div>
+      <div class="none">No LCP knob</div>
+      <div>Rank helps. The rest is how often and how large the gNB grants.</div>
+
+      <div><b>What is the most it may send?</b><span class="small muted">MFBR, AMBR</span></div>
+      <div class="none">No LCP knob</div>
+      <div>PBR is a floor, never a ceiling. Pass 2 hands out everything that is left.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Four things to keep</h2>
+    <div class="felt">
+      <div><h3>Three channels make six classes</h3><p>Promised bytes of rank 1, 2, 3 come first. Extra bytes of rank 1, 2, 3 come after. A low-rank channel's promise beats a high-rank channel's extras. That is how one mechanism gives both urgency and a guaranteed rate.</p></div>
+      <div><h3>Rank without a promise is rank among leftovers</h3><p>A top-priority channel with PBR 0 has nothing in pass 1. When grants are tight, lower channels with a PBR are paid before it. This is why signalling bearers get PBR infinity.</p></div>
+      <div><h3>The bucket is back pay</h3><p>Promise that is not spent accumulates as Bj, up to PBR × BSD. A long BSD lets a channel catch up after a dip or a quiet spell. It also lets that channel crowd out lower ranks while it does.</p></div>
+      <div><h3>LCP divides. The scheduler provides.</h3><p>If the promises add up to more than the grants carry, pass 1 runs dry in rank order and the lowest promise is broken. The gNB has to size grants to cover them, which is what the <a href="https://3gpp.studio/lab/bsr/">Buffer Status Report</a> is for.</p></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="wrap fine">
+  <p><strong>What this lab simplifies.</strong> Bytes flow like liquid: there are no SDU boundaries, so Bj never goes below zero here (in the specification it can, because a whole SDU may be served once Bj is positive). No MAC or RLC headers, and no MAC control elements, which are placed ahead of data. All three channels are allowed on every grant; the selection rules of §5.4.3.1.2 (subcarrier spacing, PUSCH duration, configured-grant restrictions) are not modelled. One grant every 10 ms. Waiting time is time in the phone's queue only. The flow needs shown (rates, budgets) and their mapping to the three numbers are examples.</p>
+  <p><strong>Sources.</strong> 3GPP TS 38.321 §5.4.3.1 (Logical Channel Prioritization: Bj, the two allocation steps, equal-priority channels served equally). TS 38.331 LogicalChannelConfig (value ranges). TS 23.501 §5.7 (QoS flows, 5QI characteristics). The specification is authoritative; this page is a teaching model. <a href="https://www.etsi.org/deliver/etsi_ts/138300_138399/138321/">Specification archive</a></p>
+</footer>
+
+<script id="engine">
+/* ---------- engine: no DOM in here ---------- */
+const T=10,N=100,DIP0=30,DIP1=50;           // ms per grant, grants per run, dip window (grant indexes)
+function waterfill(dem,cap){                 // equal shares for equal priority; integers
+  const out=dem.map(()=>0);let act=[];dem.forEach((d,i)=>{if(d>0)act.push(i);});
+  while(cap>0&&act.length){
+    const share=Math.floor(cap/act.length);
+    if(share===0){for(const i of act){if(cap<=0)break;out[i]++;cap--;}break;}
+    const done=act.filter(i=>dem[i]-out[i]<=share);
+    if(done.length){for(const i of done){const x=dem[i]-out[i];out[i]+=x;cap-=x;}act=act.filter(i=>done.indexOf(i)<0);}
+    else for(const i of act){out[i]+=share;cap-=share;}
+  }
+  return out;
+}
+function lcpRun(chs,grant){                  // chs: [{prio,Q,B}]
+  const n=chs.length,p1=new Array(n).fill(0),p2=new Array(n).fill(0);let rem=grant;
+  const prios=Array.from(new Set(chs.map(c=>c.prio))).sort((a,b)=>a-b);
+  for(const p of prios){                     // step 1: channels with Bj > 0, decreasing priority, up to Bj
+    const idx=[];chs.forEach((c,i)=>{if(c.prio===p)idx.push(i);});
+    const a=waterfill(idx.map(i=>chs[i].B>0?Math.min(chs[i].Q,chs[i].B):0),rem);
+    idx.forEach((i,k)=>{p1[i]=a[k];rem-=a[k];});
+  }
+  for(const p of prios){                     // step 3: what remains, strict decreasing priority, Bj ignored
+    const idx=[];chs.forEach((c,i)=>{if(c.prio===p)idx.push(i);});
+    const a=waterfill(idx.map(i=>chs[i].Q-p1[i]),rem);
+    idx.forEach((i,k)=>{p2[i]=a[k];rem-=a[k];});
+  }
+  return {p1,p2,unused:rem};
+}
+function grantAt(g,t){return t>=DIP0&&t<DIP1?g.dip:g.good;}
+function simulate(cfg){
+  const st=cfg.ch.map(c=>({Q:c.src.kind==='full'?Infinity:0,B:0,fifo:[],offered:0,delivered:0,promised:0,worst:0,stall:0,cur:0}));
+  const grants=[];
+  for(let t=0;t<N;t++){
+    cfg.ch.forEach((c,i)=>{
+      const s=st[i];let a=0;
+      if(c.src.kind==='steady')a=c.src.rate*T;
+      else if(c.src.kind==='frames'&&(t*T)%c.src.period===0)a=c.src.rate*c.src.period;
+      if(a>0){s.Q+=a;s.offered+=a;s.fifo.push({t,bytes:a});}
+      s.B=c.pbr===Infinity?Infinity:Math.min(s.B+c.pbr*T,c.pbr*c.bsd);   // Bj += PBR x T, capped at PBR x BSD
+    });
+    const g=grantAt(cfg.grant,t);
+    const run=lcpRun(cfg.ch.map((c,i)=>({prio:c.prio,Q:st[i].Q,B:st[i].B})),g);
+    const rec={g,unused:run.unused,ch:[]};
+    cfg.ch.forEach((c,i)=>{
+      const s=st[i],q0=s.Q,b0=s.B,got=run.p1[i]+run.p2[i];
+      s.Q-=got;if(s.B!==Infinity)s.B-=run.p1[i];                          // step 2: only pass-1 bytes drain Bj
+      s.delivered+=got;s.promised+=run.p1[i];
+      let left=got;
+      while(left>0&&s.fifo.length){const h=s.fifo[0],x=Math.min(h.bytes,left);s.worst=Math.max(s.worst,(t-h.t)*T);h.bytes-=x;left-=x;if(h.bytes===0)s.fifo.shift();}
+      if(q0>0&&got===0){s.cur++;s.stall=Math.max(s.stall,s.cur);}else s.cur=0;
+      rec.ch.push({q0,b0,p1:run.p1[i],p2:run.p2[i],q1:s.Q,b1:s.B});
+    });
+    grants.push(rec);
+  }
+  const stats=st.map((s,i)=>{
+    if(s.fifo.length)s.worst=Math.max(s.worst,(N-s.fifo[0].t)*T);
+    return {offered:cfg.ch[i].src.kind==='full'?null:s.offered,delivered:s.delivered,promised:s.promised,
+            rate:s.delivered/(N*T),worst:s.worst,stall:s.stall*T,left:s.Q};
+  });
+  return {grants,stats};
+}
+if(typeof module!=='undefined')module.exports={T,N,DIP0,DIP1,waterfill,lcpRun,simulate};
+</script>
+
+<script>
+/* ---------- view ---------- */
+const $=id=>document.getElementById(id);
+const fmt=n=>n===Infinity?'∞':Math.round(n).toLocaleString('en-US');
+const K=['a','b','c'];
+const WHO=[
+  {name:'Voice call',tag:'5QI 1 · GBR',need:16,budget:100,needText:'16 kB/s guaranteed, at most 100 ms late'},
+  {name:'Live video',tag:'5QI 2 · GBR',need:64,budget:150,needText:'64 kB/s guaranteed, at most 150 ms late'},
+  {name:'Photo backup',tag:'5QI 9 · non-GBR',need:0,budget:300,needText:'No guaranteed rate. Should not stall for long.'}
+];
+const PBRS=['0','8','16','32','64','128','256','inf'],BSDS=[5,10,20,50,100,150,300,500,1000];
+const BASE={ch:[{prio:1,pbr:'16',bsd:100},{prio:2,pbr:'64',bsd:50},{prio:3,pbr:'32',bsd:50}],video:96,grant:{good:1500,dip:300}};
+const PRESETS=[
+  {id:'base',label:'Baseline',cfg:{},look:'Everyone has a promise and normal grants can pay them all. Watch the dip: voice is untouched, video falls behind, backup stops. After the dip, video cashes in its saved promise first and backup waits a few more grants.'},
+  {id:'strict',label:'Priority only, hungry video',cfg:{ch:[{pbr:'0'},{pbr:'0'},{pbr:'0'}],video:160},look:'All PBRs are 0, so pass 1 pays nothing and everything is handed out by rank. Video now wants more than is left after voice. Backup never sends a byte. This is the starvation that PBR exists to prevent.'},
+  {id:'floor',label:'Same video, promises restored',cfg:{video:160},look:'Same hungry video, but each channel has its PBR back. Backup now gets its 32 kB/s floor in pass 1, ahead of the video\'s extra bytes. Video still gets its promised 64 and most of the leftovers.'},
+  {id:'noprom',label:'Voice ranked first, promised nothing',cfg:{ch:[{pbr:'0'},{},{}]},look:'Voice keeps rank 1 but its PBR is 0. With normal grants nothing changes. In the dip, video and backup collect their promises in pass 1 and the grant is gone before pass 2 reaches voice. Rank alone did not protect it.'},
+  {id:'memory',label:'Video with a long memory',cfg:{ch:[{},{bsd:1000},{}]},look:'Video\'s BSD is 1 s instead of 50 ms, so it keeps saving promise all through the dip. Afterwards it has much more back pay to collect, and backup waits far longer. Try 10 ms for the opposite.'}
+];
+let cfg,sim,cur=50,heroG=1500,active='base',timer=null;
+const clone=o=>JSON.parse(JSON.stringify(o));
+function applyPreset(p){
+  const c=clone(BASE);
+  if(p.cfg.video)c.video=p.cfg.video;
+  (p.cfg.ch||[]).forEach((o,i)=>Object.assign(c.ch[i],o));
+  if(p.cfg.grant)Object.assign(c.grant,p.cfg.grant);
+  cfg=c;active=p.id;
+}
+const pbrNum=s=>s==='inf'?Infinity:+s;
+function engineCfg(){
+  const src=[{kind:'steady',rate:16},{kind:'frames',rate:cfg.video,period:30},{kind:'full'}];
+  return {ch:cfg.ch.map((c,i)=>({prio:+c.prio,pbr:pbrNum(c.pbr),bsd:+c.bsd,src:src[i]})),grant:cfg.grant};
+}
+
+/* one LCP run, drawn: used by the hero and by the inspector */
+function order(chs){return chs.map((c,i)=>i).sort((x,y)=>chs[x].prio-chs[y].prio||x-y);}
+function drawRun(el,chs,grant,run){
+  const ord=order(chs);let bar='',rows='';
+  const total=Math.max(grant,1);
+  ord.forEach(i=>{if(run.p1[i]>0)bar+='<div class="seg '+K[i]+'" style="flex:'+run.p1[i]+' 0 0" title="'+WHO[i].name+', promised">'+(run.p1[i]/total>0.07?fmt(run.p1[i]):'')+'</div>';});
+  ord.forEach(i=>{if(run.p2[i]>0)bar+='<div class="seg t2 '+K[i]+'" style="flex:'+run.p2[i]+' 0 0" title="'+WHO[i].name+', leftovers">'+(run.p2[i]/total>0.07?fmt(run.p2[i]):'')+'</div>';});
+  if(run.unused>0||grant===0)bar+='<div class="seg none" style="flex:'+Math.max(run.unused,1)+' 0 0">'+(grant===0?'no grant':(run.unused/total>0.12?fmt(run.unused)+' unused':''))+'</div>';
+  let n=0,rem=grant;
+  rows+='<tr class="passrow"><td colspan="5">Pass 1 · promised bytes, by rank</td></tr>';
+  ord.forEach(i=>{
+    const c=chs[i],claim=c.B>0?Math.min(c.Q,c.B):0,got=run.p1[i];n++;
+    const why=c.B<=0?'nothing saved':(c.Q<=0?'nothing waiting':'');
+    rows+='<tr'+(got?'':' class="zero"')+'><td>'+n+'</td><td><i class="sw bg-'+K[i]+'"></i>'+WHO[i].name+'</td><td>'+fmt(c.B)+'</td><td>'+(why||fmt(claim))+'</td><td>'+fmt(got)+(got<claim?'<span class="short">grant ran out</span>':'')+'</td></tr>';
+  });
+  rows+='<tr class="passrow"><td colspan="5">Pass 2 · leftovers, by rank</td></tr>';
+  ord.forEach(i=>{
+    const c=chs[i],claim=c.Q-run.p1[i],got=run.p2[i];n++;
+    rows+='<tr'+(got?'':' class="zero"')+'><td>'+n+'</td><td><i class="sw bg-'+K[i]+'"></i>'+WHO[i].name+'</td><td>—</td><td>'+(claim>0?(claim===Infinity?'always more':fmt(claim)):'nothing waiting')+'</td><td>'+fmt(got)+(got<claim&&claim>0?'<span class="short">grant ran out</span>':'')+'</td></tr>';
+  });
+  el.innerHTML='<div class="fill" role="img" aria-label="How the grant was divided">'+bar+'</div>'
+    +'<div class="fill-key"><span><i></i>solid: promised bytes (pass 1)</span><span><i class="h"></i>hatched: leftovers (pass 2)</span></div>'
+    +'<div class="tablebox"><table class="claims"><thead><tr><th>Turn</th><th>Channel</th><th>Saved promise (Bj)</th><th>Can claim</th><th>Gets</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<p class="say">'+narrate(chs,grant,run)+'</p>';
+}
+function list(a){return a.length<2?a.join(''):a.slice(0,-1).join(', ')+' and '+a[a.length-1];}
+function narrate(chs,grant,run){
+  if(grant===0)return 'No grant, so nothing is sent. Promises keep accumulating in each bucket, up to its cap.';
+  const ord=order(chs),s1=run.p1.reduce((x,y)=>x+y,0),s2=run.p2.reduce((x,y)=>x+y,0);
+  const paid=ord.filter(i=>run.p1[i]>0).map(i=>WHO[i].name+' '+fmt(run.p1[i])+' B');
+  const shortP=ord.filter(i=>{const c=chs[i];return c.B>0&&run.p1[i]<Math.min(c.Q,c.B);}).map(i=>WHO[i].name);
+  let s=s1?'Pass 1 pays '+list(paid)+'.':'Pass 1 pays nothing: no channel has both data waiting and promise saved.';
+  if(shortP.length)s+=' The grant runs out before '+list(shortP)+' could be paid in full, so pass 2 never happens. A grant this small cannot keep every promise, whatever the LCP settings.';
+  else if(s2){s+=' Pass 2 hands the remaining '+fmt(grant-s1)+' B out by rank: '+list(ord.filter(i=>run.p2[i]>0).map(i=>WHO[i].name+' '+fmt(run.p2[i])+' B'))+'.';}
+  else if(run.unused>0&&s1)s+=' Nothing else is waiting.';
+  if(run.unused>0)s+=' '+fmt(run.unused)+' B of the grant go unused.';
+  return s;
+}
+
+/* hero */
+const HERO=[{prio:1,Q:160,B:160},{prio:2,Q:1900,B:640},{prio:3,Q:5000,B:320}];
+function renderHero(){
+  $('heroG').value=heroG;$('heroGv').textContent=fmt(heroG)+' B';
+  drawRun($('heroRun'),HERO,heroG,lcpRun(HERO,heroG));
+}
+
+/* simulator */
+function opt(v,sel,text){return '<option value="'+v+'"'+(String(v)===String(sel)?' selected':'')+'>'+text+'</option>';}
+function buildCards(){
+  let h='';
+  WHO.forEach((w,i)=>{
+    const c=cfg.ch[i];
+    let sends=i===0?'16 kB/s, steady':i===2?'As much as it can, always':
+      '<select id="video" aria-label="Video source rate">'+[64,96,160].map(v=>opt(v,cfg.video,v+' kB/s')).join('')+'</select> one frame every 30 ms';
+    h+='<div class="panel card '+K[i]+'">'
+      +'<div><h3>'+w.name+'</h3><span class="tag5">'+w.tag+'</span></div>'
+      +'<p class="rowlab">Needs</p><div class="small">'+w.needText+'</div>'
+      +'<p class="rowlab">Sends</p><div class="small">'+sends+'</div>'
+      +'<p class="rowlab">The gNB configured</p>'
+      +'<div class="knobs">'
+      +'<label>priority<select id="prio'+i+'">'+[1,2,3,4,5,6,7,8].map(v=>opt(v,c.prio,v)).join('')+'</select></label>'
+      +'<label>PBR, kB/s<select id="pbr'+i+'">'+PBRS.map(v=>opt(v,c.pbr,v==='inf'?'∞':v)).join('')+'</select></label>'
+      +'<label>BSD, ms<select id="bsd'+i+'">'+BSDS.map(v=>opt(v,c.bsd,v)).join('')+'</select></label>'
+      +'</div>'
+      +'<div class="verdicts" id="ver'+i+'"></div></div>';
+  });
+  $('cards').innerHTML=h;
+  WHO.forEach((w,i)=>{
+    $('prio'+i).onchange=e=>{cfg.ch[i].prio=+e.target.value;custom();};
+    $('pbr'+i).onchange=e=>{cfg.ch[i].pbr=e.target.value;custom();};
+    $('bsd'+i).onchange=e=>{cfg.ch[i].bsd=+e.target.value;custom();};
+  });
+  $('video').onchange=e=>{cfg.video=+e.target.value;custom();};
+}
+function custom(){active='';recompute();}
+function vline(cls,mark,html){return '<div class="v '+cls+'"><span class="mark">'+mark+'</span><span>'+html+'</span></div>';}
+function renderVerdicts(){
+  sim.stats.forEach((s,i)=>{
+    const w=WHO[i];let h='';
+    const rate=s.rate.toFixed(s.rate<100?1:0);
+    if(w.need){
+      const offered=s.offered/(N*T),target=Math.min(w.need,offered),ok=s.rate>=0.97*target;
+      h+=vline(ok?'':'bad',ok?'✓':'✗','Delivered <b>'+rate+' kB/s</b>. Promised '+w.need+'.');
+      const wok=s.worst<=w.budget;
+      h+=vline(wok?'':'bad',wok?'✓':'✗','Worst wait in the phone <b>'+(s.worst===0?'under 10 ms':fmt(s.worst)+' ms')+'</b>. Budget '+w.budget+' ms.');
+    }else{
+      h+=vline('info','i','Delivered <b>'+rate+' kB/s</b>. No rate was promised.');
+      const ok=s.stall<=w.budget;
+      h+=vline(ok?'':'bad',ok?'✓':'✗','Longest stall <b>'+fmt(s.stall)+' ms</b>. Yardstick '+w.budget+' ms.');
+    }
+    $('ver'+i).innerHTML=h;
+  });
+}
+function renderGrantStrip(){
+  $('gGood').value=cfg.grant.good;$('gDip').value=cfg.grant.dip;
+  $('gGoodV').textContent=fmt(cfg.grant.good)+' B = '+cfg.grant.good/10+' kB/s';
+  $('gDipV').textContent=fmt(cfg.grant.dip)+' B = '+cfg.grant.dip/10+' kB/s';
+  const inf=cfg.ch.some(c=>c.pbr==='inf'),sum=cfg.ch.reduce((a,c)=>a+(c.pbr==='inf'?0:+c.pbr),0);
+  const g=cfg.grant.good/10,d=cfg.grant.dip/10;
+  $('fund').innerHTML='The promises add up to <b class="num">'+sum+(inf?' kB/s plus one unlimited channel':' kB/s')+'</b>. Normal grants carry '+g+' kB/s: '
+    +(sum<=g&&!inf?'<b class="ok">enough to pay them all</b>':'<b class="no">not enough to pay them all</b>')+'. During the dip, '+d+' kB/s: '
+    +(sum<=d&&!inf?'<b class="ok">still enough</b>.':'<b class="no">someone\'s promise will be broken, lowest rank first</b>.');
+}
+function renderCharts(){
+  const ymax=Math.max(cfg.grant.good,cfg.grant.dip,100),ord=order(cfg.ch);
+  let h='<rect class="dipzone" x="'+DIP0+'" y="0" width="'+(DIP1-DIP0)+'" height="'+ymax+'"/>';
+  sim.grants.forEach((r,t)=>{
+    let y=ymax;
+    const put=(i,v,cls)=>{if(v>0){y-=v;h+='<rect class="f-'+K[i]+cls+'" x="'+(t+0.1)+'" y="'+y+'" width="0.8" height="'+v+'"/>';}};
+    ord.forEach(i=>put(i,r.ch[i].p1,''));ord.forEach(i=>put(i,r.ch[i].p2,' t2'));
+  });
+  const m=$('mainChart');m.setAttribute('viewBox','0 0 '+N+' '+ymax);m.innerHTML=h;
+  $('ymax').textContent=fmt(ymax)+' B per grant';
+  let l='';
+  WHO.forEach((w,i)=>{
+    const c=cfg.ch[i],pbr=pbrNum(c.pbr),cap=pbr*c.bsd;
+    l+='<div class="lanelab"><span><i class="sw bg-'+K[i]+'"></i>'+w.name+': saved promise (Bj) before each grant</span><span class="num">'
+      +(pbr===0?'PBR 0, so the bucket stays empty':pbr===Infinity?'PBR ∞, so the bucket is bottomless':'cap = '+c.pbr+' kB/s × '+c.bsd+' ms = '+fmt(cap)+' B')+'</span></div>';
+    let d='';
+    if(pbr>0&&pbr!==Infinity){d='M0 '+cap;sim.grants.forEach((r,t)=>{const y=cap-r.ch[i].b0;d+=' L'+t+' '+y+' L'+(t+1)+' '+y;});d+=' L'+N+' '+cap+' Z';}
+    l+='<svg class="lane" preserveAspectRatio="none" viewBox="0 '+(-(cap||1)*0.08)+' '+N+' '+((cap||1)*1.08)+'" role="img" aria-label="'+w.name+' bucket level over time">'
+      +'<rect class="dipzone" x="'+DIP0+'" y="'+(-(cap||1)*0.08)+'" width="'+(DIP1-DIP0)+'" height="'+((cap||1)*1.08)+'"/>'
+      +(d?'<path class="s-'+K[i]+'" d="'+d+'"/>':'')+'</svg>';
+  });
+  $('lanes').innerHTML=l;
+}
+function renderCursor(){
+  $('cursor').style.left=((cur+0.5)/N*100)+'%';$('scrub').value=cur;
+  const r=sim.grants[cur];
+  $('dTitle').textContent='Grant '+(cur+1)+' of '+N+' · t = '+cur*T+' ms · '+fmt(r.g)+' B';
+  const chs=cfg.ch.map((c,i)=>({prio:+c.prio,Q:r.ch[i].q0,B:r.ch[i].b0}));
+  drawRun($('dRun'),chs,r.g,{p1:r.ch.map(c=>c.p1),p2:r.ch.map(c=>c.p2),unused:r.unused});
+}
+function renderPresets(){
+  $('presets').innerHTML=PRESETS.map(p=>'<button class="chip" data-p="'+p.id+'" aria-pressed="'+(p.id===active)+'">'+p.label+'</button>').join('');
+  const p=PRESETS.find(p=>p.id===active);
+  $('look').textContent=p?p.look:'Your own settings. The verdicts on each card and the chart below update as you change them.';
+  $('presets').querySelectorAll('button').forEach(b=>b.onclick=()=>{applyPreset(PRESETS.find(p=>p.id===b.dataset.p));cur=50;buildCards();recompute();});
+}
+function recompute(){
+  sim=simulate(engineCfg());
+  renderPresets();renderVerdicts();renderGrantStrip();renderCharts();renderCursor();
+}
+function setCur(i){cur=Math.max(0,Math.min(N-1,i));renderCursor();}
+function stop(){if(timer){clearInterval(timer);timer=null;$('playBtn').textContent='Play';}}
+
+function start(saved){
+  saved=saved||{};
+  applyPreset(PRESETS[0]);
+  if(saved.cfg&&saved.cfg.ch&&saved.cfg.ch.length===3){cfg=saved.cfg;active=saved.active||'';}
+  if(typeof saved.cur==='number')cur=saved.cur;
+  if(typeof saved.heroG==='number')heroG=saved.heroG;
+  renderHero();buildCards();recompute();
+}
+$('heroG').addEventListener('input',e=>{heroG=+e.target.value;renderHero();});
+$('gGood').addEventListener('input',e=>{cfg.grant.good=+e.target.value;custom();});
+$('gDip').addEventListener('input',e=>{cfg.grant.dip=+e.target.value;custom();});
+$('scrub').addEventListener('input',e=>{stop();setCur(+e.target.value);});
+$('playBtn').onclick=()=>{
+  if(timer){stop();return;}
+  if(cur>=N-1)setCur(0);
+  $('playBtn').textContent='Pause';
+  timer=setInterval(()=>{if(cur>=N-1){stop();return;}setCur(cur+1);},110);
+};
+(function(){
+  const el=$('charts');let down=false;
+  const pick=e=>{const r=el.getBoundingClientRect();stop();setCur(Math.floor((e.clientX-r.left)/r.width*N));};
+  el.addEventListener('pointerdown',e=>{down=true;pick(e);});
+  el.addEventListener('pointermove',e=>{if(down&&e.buttons)pick(e);});
+  window.addEventListener('pointerup',()=>{down=false;});
+})();
+const hot=window.claude&&window.claude.hot;
+if(hot&&hot.snapshot)hot.snapshot(()=>({cfg,active,cur,heroG}));
+if(hot&&hot.ready)hot.ready(start);else start((hot&&hot.data)||{});
+</script>
+</body>
+</html>

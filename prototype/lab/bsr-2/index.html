@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buffer Status Report Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a crisp UE on the left, a frosted wall in the middle, and the gNB's blurry belief on the right.
+   Ink-on-fog instrument panel; the only loud colour is "belief blue", the thing the gNB thinks it knows. */
+:root{
+  --bg:#EDF0F4; --surface:#FFFFFF; --sunk:#E2E7EE; --ink:#0F1B2D; --muted:#566378; --line:#C9D2DD;
+  --belief:#2A5BD7; --a:#D4472A; --b:#0B8A7C; --warn:#A8690B; --bad:#C2334B; --good:#1B7F45;
+  --font-display:"Bricolage Grotesque","Arial Narrow",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+    --belief:#86A9FF; --a:#FF8259; --b:#45D1BF; --warn:#E7B04D; --bad:#FF7C90; --good:#5DD08C;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0B121E; --surface:#131C2C; --sunk:#0E1624; --ink:#E9EEF6; --muted:#97A4B8; --line:#2A374D;
+  --belief:#86A9FF; --a:#FF8259; --b:#45D1BF; --warn:#E7B04D; --bad:#FF7C90; --good:#5DD08C;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--font-body)}
+a{color:var(--belief)}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--belief);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+
+/* top bar */
+.top{display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between;align-items:center;padding:18px 0;font-size:14px}
+.top a{text-decoration:none;font-weight:500}
+.top .tag{font-family:var(--font-mono);font-size:12px;color:var(--muted);letter-spacing:.02em}
+
+/* hero */
+.hero{padding:28px 0 8px}
+h1{font:800 clamp(34px,6.2vw,68px)/1.02 var(--font-display);letter-spacing:-.025em;margin:0 0 18px;text-wrap:balance}
+h1 .live{font-family:var(--font-display);font-variant-numeric:tabular-nums;color:var(--ink);border-bottom:.08em solid var(--ink)}
+h1 .faint{color:var(--belief)}
+.lede{max-width:62ch;font-size:18px;margin:0 0 26px;color:var(--ink)}
+h2{font:800 clamp(26px,3.6vw,40px)/1.08 var(--font-display);letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance}
+h3{font:700 17px/1.25 var(--font-display);margin:0 0 4px}
+section{padding:36px 0}
+section > .wrap > p.intro{max-width:66ch;margin:0 0 22px}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.eyebrow{font:600 12px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+
+/* controls */
+.btn{appearance:none;border:1px solid var(--ink);background:var(--ink);color:var(--surface);border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer}
+.btn:hover{filter:brightness(1.15)}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--ink);filter:none}
+.btn[aria-pressed="true"]{background:var(--belief);border-color:var(--belief);color:var(--surface)}
+.chip{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:14px;cursor:pointer;white-space:nowrap}
+.chip:hover:not(:disabled){border-color:var(--ink)}
+.chip:disabled{opacity:.45;cursor:not-allowed}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+input[type=range]{width:100%;accent-color:var(--belief);margin:0;height:28px}
+input[type=number]{font-family:var(--font-mono);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:9.5ch;min-width:0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{appearance:none;border:0;background:transparent;padding:8px 12px;font-size:14px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+
+/* bits */
+.octets{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-start}
+.field{display:inline-flex;flex-direction:column;gap:4px}
+.field small{font:500 11px/1.2 var(--font-mono);color:var(--muted)}
+.bits{display:inline-flex;gap:2px}
+.bit{width:20px;height:26px;display:grid;place-items:center;font:500 13px/1 var(--font-mono);border:1px solid var(--line);border-radius:3px;background:var(--sunk);color:var(--muted)}
+.bit.on{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.field.bs .bit.on{background:var(--belief);border-color:var(--belief)}
+
+/* squeezer */
+.sq-top{display:grid;grid-template-columns:1fr auto;gap:12px 16px;align-items:center;margin-bottom:6px}
+.sq-top label{grid-column:1/-1;font-weight:600}
+.ruler{position:relative;margin:18px 0 6px}
+.lane{position:relative;height:34px;background:var(--sunk);border-radius:4px;overflow:hidden}
+.lane + .lane{margin-top:18px}
+.lane-label{font:500 12px/1 var(--font-mono);color:var(--muted);margin:0 0 5px}
+.bk{position:absolute;top:0;bottom:0;border-left:1px solid var(--surface)}
+.bk.alt{background:color-mix(in srgb,var(--ink) 9%,transparent)}
+.bk.hit{background:var(--belief)}
+.bk.over{background:repeating-linear-gradient(135deg,transparent 0 5px,color-mix(in srgb,var(--ink) 18%,transparent) 5px 7px)}
+.bk.over.hit{background:repeating-linear-gradient(135deg,var(--belief) 0 5px,color-mix(in srgb,var(--belief) 55%,transparent) 5px 7px)}
+.lanes{position:relative}
+.needle{position:absolute;top:14px;bottom:-4px;width:2px;background:var(--ink);transform:translateX(-1px);pointer-events:none}
+.needle::after{content:"";position:absolute;top:-6px;left:-5px;border:6px solid transparent;border-top-color:var(--ink)}
+.axis{position:relative;height:22px;margin-top:6px}
+.axis span{position:absolute;top:0;transform:translateX(-50%);font:400 11px/1 var(--font-mono);color:var(--muted);padding-top:8px}
+.axis span::before{content:"";position:absolute;left:50%;top:0;height:5px;border-left:1px solid var(--muted)}
+.axis span:first-child{transform:none}
+.axis span:first-child::before{left:0}
+.axis span:last-child{transform:translateX(-100%)}
+.axis span:last-child::before{left:100%}
+.heard{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+.heard > div{border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.heard .says{font:700 clamp(19px,2.4vw,24px)/1.15 var(--font-display);color:var(--belief)}
+.heard .says span{font-family:var(--font-mono);font-weight:600;font-size:.9em}
+.sq-note{margin:14px 0 0;max-width:72ch}
+
+/* game */
+.score{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;margin-bottom:14px}
+.score .stat{display:flex;flex-direction:column;gap:2px}
+.score .stat b{font:600 20px/1 var(--font-mono);font-variant-numeric:tabular-nums}
+.score .stat span{font-size:12px;color:var(--muted)}
+.score .spacer{flex:1}
+.board{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr) minmax(0,1.25fr);gap:14px;align-items:stretch}
+.board .panel{display:flex;flex-direction:column;gap:14px;min-width:0}
+.panel.you{border-color:var(--belief);box-shadow:0 0 0 1px var(--belief)}
+.ptitle{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.ptitle h3{margin:0}
+.ch{display:flex;flex-direction:column;gap:6px}
+.ch-head{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
+.dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
+.dot.a{background:var(--a)} .dot.b{background:var(--b)}
+.lcg{font:500 11px/1 var(--font-mono);border:1px solid var(--line);border-radius:4px;padding:3px 5px;color:var(--muted);white-space:nowrap}
+.exact{font:600 22px/1 var(--font-mono);font-variant-numeric:tabular-nums}
+.track{position:relative;height:16px;background:var(--sunk);border-radius:3px}
+.track .fill{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+.track .fill.a{background:var(--a)} .track .fill.b{background:var(--b)}
+.frost .secret{filter:blur(9px);user-select:none;pointer-events:none}
+.frost-note{font-size:13px;color:var(--muted);margin:0}
+.ue .btn{align-self:flex-start;margin-top:auto}
+
+.msg{border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.msg .dir{font:600 12px/1 var(--font-mono);color:var(--muted);letter-spacing:.04em}
+.msg.sr{border-color:var(--warn)}
+.msg.sr .dir{color:var(--warn)}
+.msg.in{animation:slide .35s ease-out}
+@keyframes slide{from{transform:translateX(-14px);opacity:.3}to{transform:none;opacity:1}}
+.pdu{display:flex;height:22px;border-radius:4px;overflow:hidden;background:var(--sunk)}
+.pdu i{display:block;min-width:2px}
+.pdu .a{background:var(--a)} .pdu .b{background:var(--b)}
+.pdu .pad{background:repeating-linear-gradient(135deg,var(--sunk) 0 5px,color-mix(in srgb,var(--ink) 30%,transparent) 5px 7px)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px}
+.legend .k{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.coach{margin:0;padding:12px;border-left:3px solid var(--ink);background:var(--sunk);border-radius:0 6px 6px 0;font-size:15px}
+
+.belief{display:flex;flex-direction:column;gap:6px}
+.belief-head{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
+.belief-head b{font:600 17px/1.2 var(--font-mono);color:var(--belief);font-variant-numeric:tabular-nums}
+.btrack{position:relative;height:26px;background:var(--sunk);border-radius:4px}
+.btrack.unknown{background:repeating-linear-gradient(135deg,var(--sunk) 0 6px,color-mix(in srgb,var(--belief) 30%,transparent) 6px 8px)}
+.band{position:absolute;top:3px;bottom:3px;min-width:5px;background:var(--belief);border-radius:3px;opacity:.85}
+.truth{position:absolute;top:-4px;bottom:-4px;width:3px;transform:translateX(-1.5px);background:var(--good);border-radius:2px}
+.truth.out{background:var(--bad)}
+.verdict{font-size:13px;font-weight:600}
+.verdict.in{color:var(--good)} .verdict.out{color:var(--bad)}
+.age{font-size:13px;color:var(--muted)}
+.baxis{position:relative;height:16px}
+.baxis span{position:absolute;top:2px;transform:translateX(-50%);font:400 10px/1 var(--font-mono);color:var(--muted)}
+.baxis span:first-child{transform:none}
+.baxis span:last-child{transform:translateX(-100%)}
+.total{display:flex;justify-content:space-between;gap:8px;border-top:1px dashed var(--line);padding-top:10px;flex-wrap:wrap}
+.total b{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.ctl{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:14px;margin-top:auto}
+.ctl-row{display:flex;gap:10px;align-items:center}
+.ctl-row .btn{flex:1;white-space:nowrap}
+.ctl label{font-weight:600}
+
+/* timeline */
+.tlwrap{margin-top:14px}
+.tl{position:relative;padding-left:40px}
+.tl-grid{position:absolute;left:40px;right:0;top:0;height:150px;pointer-events:none}
+.tl-grid i{position:absolute;left:0;right:0;border-top:1px solid var(--line);opacity:.7}
+.tl-grid span{position:absolute;right:calc(100% + 6px);transform:translateY(50%);font:400 10px/1 var(--font-mono);color:var(--muted)}
+.tl-cols{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;height:150px;position:relative}
+.col{position:relative;border-radius:3px}
+.col.now{background:color-mix(in srgb,var(--belief) 10%,transparent);outline:1px dashed var(--belief)}
+.col .cb{position:absolute;left:18%;right:18%;min-height:4px;background:var(--belief);opacity:.55;border-radius:2px}
+.col .cb.unknown{top:0;bottom:0;opacity:1;background:repeating-linear-gradient(135deg,transparent 0 5px,color-mix(in srgb,var(--belief) 35%,transparent) 5px 7px)}
+.col .cg{position:absolute;left:4%;right:4%;height:3px;background:var(--ink);transform:translateY(50%)}
+.col .ct{position:absolute;left:50%;width:9px;height:9px;border-radius:50%;background:var(--good);border:2px solid var(--surface);transform:translate(-50%,50%)}
+.col .ct.out{background:var(--bad)}
+.tl-x{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;margin-top:4px;font:400 11px/1 var(--font-mono);color:var(--muted);text-align:center}
+.tl-legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;margin-top:10px;padding-left:40px}
+.tl-legend i{display:inline-block;vertical-align:middle;margin-right:6px}
+.lg-b{width:10px;height:14px;background:var(--belief);opacity:.55;border-radius:2px}
+.lg-g{width:16px;height:3px;background:var(--ink)}
+.lg-t{width:9px;height:9px;border-radius:50%;background:var(--good)}
+.lg-o{width:9px;height:9px;border-radius:50%;background:var(--bad)}
+
+/* results */
+.results table{border-collapse:collapse;width:100%;font-size:14px}
+.results th,.results td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.results th:first-child,.results td:first-child{text-align:left}
+.results th{font:500 11px/1.2 var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.results td{font-family:var(--font-mono)}
+.results td:first-child{font-family:var(--font-body)}
+.results tr.me td{font-weight:600;color:var(--belief)}
+.results .tablebox{overflow-x:auto}
+
+/* takeaways */
+.felt{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;max-width:980px}
+.felt p{margin:0;color:var(--ink)}
+.steps{counter-reset:s;list-style:none;margin:20px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;max-width:980px}
+.steps li{counter-increment:s;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px}
+.steps li::before{content:counter(s);font:800 28px/1 var(--font-display);color:var(--belief);min-width:1.2em}
+.steps p{margin:4px 0 0}
+.fine{border-top:1px solid var(--line);padding:28px 0 56px;font-size:14px;color:var(--muted)}
+.fine p{max-width:78ch;margin:0 0 10px}
+.fine strong{color:var(--ink)}
+
+@media (max-width:900px){
+  .board{grid-template-columns:1fr}
+  .board .you{order:-1}
+  .heard{grid-template-columns:1fr}
+  .felt{grid-template-columns:1fr}
+  .steps{grid-template-columns:1fr}
+}
+@media (max-width:480px){
+  .wrap{padding:0 16px}
+  .bit{width:17px;height:24px;font-size:12px}
+  .ctl-row{flex-wrap:wrap}
+}
+@media (prefers-reduced-motion:reduce){.msg.in{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a href="https://3gpp.studio/index.html">← All experiments</a>
+    <span class="tag">MAC · TS 38.321 §5.4.5 · teaching model</span>
+  </header>
+</div>
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <h1><span class="live" id="h1n">1,400</span> bytes are waiting.<br>The network hears <span class="faint">5 bits</span>.</h1>
+    <p class="lede">Your phone knows its upload queue to the byte. The base station (gNB) never sees that number. It gets a Buffer Status Report: a bucket number from a table. Drag the queue and watch what survives the trip.</p>
+
+    <div class="panel" id="squeezer">
+      <div class="sq-top">
+        <label for="heroR">Bytes waiting in the UE</label>
+        <input type="range" id="heroR" min="0" max="1000" step="1" value="500" aria-describedby="sqNote">
+        <input type="number" id="heroN" min="0" max="1000000" step="1" value="1400" aria-label="Bytes waiting, exact">
+      </div>
+      <div class="chips" aria-label="Examples">
+        <button class="chip" data-hero="0">Empty</button>
+        <button class="chip" data-hero="60">A chat message · 60 B</button>
+        <button class="chip" data-hero="1400">One full packet · 1,400 B</button>
+        <button class="chip" data-hero="8000">8,000 B</button>
+        <button class="chip" data-hero="400000">A photo · 400,000 B</button>
+      </div>
+
+      <div class="ruler">
+        <div class="lanes">
+          <p class="lane-label">Short BSR · 5-bit field · 32 buckets</p>
+          <div class="lane" id="lane5"></div>
+          <p class="lane-label" style="margin-top:14px">Long BSR · 8-bit field · 256 buckets</p>
+          <div class="lane" id="lane8"></div>
+          <div class="needle" id="needle"></div>
+        </div>
+        <div class="axis" id="heroAxis"></div>
+      </div>
+
+      <div class="heard">
+        <div>
+          <p class="eyebrow">Short BSR · 1 octet</p>
+          <div class="octets" id="oct5"></div>
+          <div class="says" id="says5"></div>
+          <div class="small muted" id="blur5"></div>
+        </div>
+        <div>
+          <p class="eyebrow">Long BSR · 1 bitmap octet + 1 octet per group</p>
+          <div class="octets" id="oct8"></div>
+          <div class="says" id="says8"></div>
+          <div class="small muted" id="blur8"></div>
+        </div>
+      </div>
+      <p class="sq-note small muted" id="sqNote">The ruler is logarithmic, and on it every bucket is the same width. Each Short bucket ends about 39% above the last one; each Long bucket about 6.5%. So the blur grows with the queue: a few bytes when it is small, thousands when it is large.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>The whole story, from zero</h2>
+    <ol class="steps">
+      <li><div><h3>The phone may only send when told</h3><p>A phone (the UE) keeps its upload data in queues. It cannot transmit when it likes. The base station (gNB) hands out grants: permission to send a certain number of bytes now.</p></div></li>
+      <li><div><h3>The gNB cannot see the queues</h3><p>To size a grant well, the gNB needs to know how much is waiting. That number lives inside the phone. Something has to carry it across.</p></div></li>
+      <li><div><h3>First, a raised hand</h3><p>With data waiting and no grant, the phone sends a Scheduling Request. It is a single signal that means I have something. It carries no size.</p></div></li>
+      <li><div><h3>The gNB answers with a small grant</h3><p>It does not know how much to give yet, so it gives a little. That is enough room for the phone to say more.</p></div></li>
+      <li><div><h3>The phone reports a bucket, not a number</h3><p>Inside that grant it sends a Buffer Status Report. Queues are bundled into logical channel groups, and for each group the report holds one index into a table of ranges, as in the ruler above.</p></div></li>
+      <li><div><h3>The gNB sizes the next grants from it</h3><p>The report describes one moment and starts aging at once. Fresh reports ride along with later data: when new urgent data arrives, on a periodic timer, or when a grant has room to spare.</p></div></li>
+    </ol>
+  </div>
+</section>
+
+<section id="play">
+  <div class="wrap">
+    <h2>Now you schedule. Blind.</h2>
+    <p class="intro">You are the gNB. Every slot you decide how many bytes this UE may send. Grant too little and data waits. Grant too much and the UE stuffs the rest with padding. All you have is the last BSR, and the queue keeps moving after it was written.</p>
+
+    <div class="score">
+      <div class="stat"><b id="sSlot">1 / 12</b><span>slot</span></div>
+      <div class="stat"><b id="sWaste">0 B</b><span>padding wasted</span></div>
+      <div class="stat"><b id="sWait">0 B</b><span>left waiting (summed over slots)</span></div>
+      <div class="spacer"></div>
+      <div class="seg" role="group" aria-label="Logical channel groups">
+        <button id="mSplit" aria-pressed="true">Two groups</button>
+        <button id="mShared" aria-pressed="false">One shared group</button>
+      </div>
+      <button class="btn ghost" id="restart">Restart</button>
+    </div>
+
+    <div class="board">
+      <div class="panel ue frost" id="uePanel">
+        <div class="ptitle"><h3>Inside the UE</h3><span class="small muted">exact bytes</span></div>
+        <div class="ch">
+          <div class="ch-head"><span><i class="dot a"></i>Video call <span class="lcg" id="lcgA">LCG 0</span></span><span class="exact secret" id="ueA">1,200</span></div>
+          <div class="track secret"><div class="fill a" id="ueAbar"></div></div>
+          <span class="small muted">Small steady packets. Served first.</span>
+        </div>
+        <div class="ch">
+          <div class="ch-head"><span><i class="dot b"></i>Photo backup <span class="lcg" id="lcgB">LCG 1</span></span><span class="exact secret" id="ueB">800</span></div>
+          <div class="track secret"><div class="fill b" id="ueBbar"></div></div>
+          <span class="small muted">Big bursts, now and then. Served second.</span>
+        </div>
+        <p class="frost-note" id="frostNote">Frosted on purpose. The gNB cannot see in here.</p>
+        <button class="btn ghost" id="xray" aria-pressed="false">X-ray the UE</button>
+      </div>
+
+      <div class="panel air">
+        <div class="ptitle"><h3>On the air</h3><span class="small muted">what actually crossed</span></div>
+        <div id="airBody" style="display:flex;flex-direction:column;gap:12px"></div>
+        <p class="coach" id="coach" aria-live="polite"></p>
+      </div>
+
+      <div class="panel you">
+        <div class="ptitle"><h3>What you know</h3><span class="small muted">you are the gNB</span></div>
+        <div id="beliefs" style="display:flex;flex-direction:column;gap:14px"></div>
+        <div class="ctl" id="ctl">
+          <label for="grantR">Grant for this slot</label>
+          <div class="chips">
+            <button class="chip" id="gSkip">Skip</button>
+            <button class="chip" id="gProbe">Probe · 100 B</button>
+            <button class="chip" id="gLow">Low end</button>
+            <button class="chip" id="gHigh">High end</button>
+          </div>
+          <input type="range" id="grantR" min="0" max="1000" step="1" value="0">
+          <div class="ctl-row">
+            <input type="number" id="grantN" min="0" max="200000" step="1" value="100" aria-label="Grant size in bytes, exact">
+            <button class="btn" id="go">Send grant</button>
+          </div>
+        </div>
+        <div class="results" id="results" hidden></div>
+      </div>
+    </div>
+
+    <div class="panel tlwrap">
+      <p class="eyebrow">This round, slot by slot · total bytes, log scale</p>
+      <div class="tl">
+        <div class="tl-grid" id="tlGrid"></div>
+        <div class="tl-cols" id="tlCols"></div>
+        <div class="tl-x" id="tlX"></div>
+      </div>
+      <div class="tl-legend">
+        <span><i class="lg-b"></i>what you believed</span>
+        <span><i class="lg-g"></i>what you granted</span>
+        <span><i class="lg-t"></i>really waiting, inside your range</span>
+        <span><i class="lg-o"></i>really waiting, outside it</span>
+        <span class="muted" id="tlHint">Dots appear with X-ray, or when the round ends.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Four things you just felt</h2>
+    <div class="felt" style="margin-top:20px">
+      <div><h3>Buckets, not bytes</h3><p>A BSR field is an index into a table of ranges. The UE says which bucket, and the gNB has to pick a number inside it. Short BSR has 32 buckets, Long BSR has 256.</p></div>
+      <div><h3>A snapshot that starts aging at once</h3><p>The values describe what is left after the PDU carrying the report was built. Anything that arrives later is invisible until the next report. A report can be old and still right, or old and wrong.</p></div>
+      <div><h3>Groups, not channels</h3><p>The UE reports per logical channel group. Put the call and the backup in one group and the gNB gets one summed bucket, in the coarse 5-bit table, with no idea which part is urgent.</p></div>
+      <div><h3>An SR is only a raised hand</h3><p>When new data shows up and there is no grant to report it in, the UE sends a Scheduling Request. It carries no size at all. That is why the first grant after an SR is usually a small probe.</p></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="wrap fine">
+  <p><strong>What this lab simplifies.</strong> One UE, two logical channels, at most two LCGs. Every PDU carries a BSR, as if the periodic timer ran each slot. The grant counts payload bytes only; headers and the BSR itself ride free. Data is taken from the call first, then the backup, which is a fixed order and not full LCP (how a real phone divides a grant is in the <a href="https://3gpp.studio/lab/lcp/index.html">LCP lab</a>). Format follows §5.4.5: Long when more than one LCG has data as the PDU is built, otherwise Short; values are the bytes left after assembly. Not modelled: timers, Padding, Truncated, Extended and Refined BSR, HARQ, SR timing, other UEs.</p>
+  <p><strong>Sources.</strong> 3GPP TS 38.321, §5.4.5 (procedure) and §6.1.3.1 (formats, Tables 6.1.3.1-1 and 6.1.3.1-2). Index <span class="num">i</span> means <span class="num">B[i−1] &lt; BS ≤ B[i]</span>. The specification is authoritative; this page is a teaching model. <a href="https://www.etsi.org/deliver/etsi_ts/138300_138399/138321/">Specification archive</a></p>
+</footer>
+
+<script id="engine">
+/* ---------- engine: no DOM in here ---------- */
+const B5=[0,10,14,20,28,38,53,74,102,142,198,276,384,535,745,1038,1446,2014,2806,3909,5446,7587,10570,14726,20516,28581,39818,55474,77284,107669,150000];
+const B8=[0,10,11,12,13,14,15,16,17,18,19,20,22,23,25,26,28,30,32,34,36,38,40,43,46,49,52,55,59,62,66,71,75,80,85,91,97,103,110,117,124,132,141,150,160,170,181,193,205,218,233,248,264,281,299,318,339,361,384,409,436,464,494,526,560,597,635,677,720,767,817,870,926,987,1051,1119,1191,1269,1351,1439,1532,1631,1737,1850,1970,2098,2234,2379,2533,2698,2873,3059,3258,3469,3694,3934,4189,4461,4751,5059,5387,5737,6109,6506,6928,7378,7857,8367,8910,9488,10104,10760,11458,12202,12994,13838,14736,15692,16711,17795,18951,20181,21491,22885,24371,25953,27638,29431,31342,33376,35543,37850,40307,42923,45709,48676,51836,55200,58784,62599,66663,70990,75598,80505,85730,91295,97221,103532,110252,117409,125030,133146,141789,150992,160793,171231,182345,194182,206786,220209,234503,249725,265935,283197,301579,321155,342002,364202,387842,413018,439827,468377,498780,531156,565634,602350,641449,683087,727427,774645,824928,878475,935498,996222,1060888,1129752,1203085,1281179,1364342,1452903,1547213,1647644,1754595,1868488,1989774,2118933,2256475,2402946,2558924,2725027,2901912,3090279,3290873,3504487,3731968,3974215,4232186,4506902,4799451,5110989,5442750,5796046,6172275,6572925,6999582,7453933,7937777,8453028,9001725,9586039,10208280,10870913,11576557,12328006,13128233,13980403,14887889,15854280,16883401,17979324,19146385,20389201,21712690,23122088,24622972,26221280,27923336,29735875,31666069,33721553,35910462,38241455,40723756,43367187,46182206,49179951,52372284,55771835,59392055,63247269,67352729,71724679,76380419,81338368];
+function quant(v,bits){
+  const T=bits===5?B5:B8;
+  if(v<=0) return {idx:0,lo:0,hi:0,bits};
+  for(let i=1;i<T.length;i++) if(v<=T[i]) return {idx:i,lo:T[i-1],hi:T[i],bits};
+  return {idx:T.length,lo:T[T.length-1],hi:Infinity,bits};
+}
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function makeArrivals(seed,n){
+  const r=rng(seed),arr=[{A:1200,B:800}];
+  for(let t=1;t<n;t++){
+    const a=r()<0.7?Math.round((150+r()*450)/10)*10:0;
+    const b=r()<0.28?Math.round((2000+r()*7000)/100)*100:0;
+    arr.push({A:a,B:b});
+  }
+  return arr;
+}
+function land(s,t){
+  const a=s.arr[t];let trig=false;
+  if(a.A>0&&s.A===0) trig=true;                 // new data of higher priority than anything waiting
+  if(a.B>0&&s.A===0&&s.B===0) trig=true;        // new data and nothing was waiting
+  s.A+=a.A;s.B+=a.B;if(trig) s.sr=true;
+}
+function newGame(mode,arr){
+  const s={mode,arr,n:arr.length,t:0,A:0,B:0,belief:mode==='split'?[null,null]:[null],sr:false,waste:0,wait:0,log:[],over:false};
+  land(s,0);return s;
+}
+function groupsOf(s){return s.mode==='split'?[s.A,s.B]:[s.A+s.B];}
+function step(s,grant){
+  grant=Math.max(0,Math.round(grant)||0);
+  const rec={t:s.t,grant,sr:s.sr,before:{A:s.A,B:s.B},beliefBefore:s.belief.map(b=>b&&Object.assign({},b)),pdu:null};
+  if(grant>0){
+    const before=groupsOf(s),withData=[];
+    before.forEach((v,i)=>{if(v>0)withData.push(i);});
+    const sa=Math.min(s.A,grant),sb=Math.min(s.B,grant-sa),pad=grant-sa-sb;
+    s.A-=sa;s.B-=sb;
+    const after=groupsOf(s);let bsr;
+    if(withData.length>1) bsr={format:'long',fields:withData.map(i=>Object.assign({lcg:i},quant(after[i],8)))};
+    else{const i=withData.length?withData[0]:0;bsr={format:'short',fields:[Object.assign({lcg:i},quant(after[i],5))]};}
+    s.belief=after.map((_,i)=>{
+      const f=bsr.fields.find(f=>f.lcg===i);
+      return f?Object.assign({t:s.t,inferred:false},f):{lcg:i,idx:0,lo:0,hi:0,bits:0,t:s.t,inferred:true};
+    });
+    s.sr=false;s.waste+=pad;rec.pdu={sa,sb,pad,bsr};
+  }
+  s.wait+=s.A+s.B;rec.after={A:s.A,B:s.B};
+  s.log.push(rec);s.t++;
+  if(s.t<s.n) land(s,s.t); else s.over=true;
+  return rec;
+}
+function beliefTotal(belief){
+  if(belief.some(b=>!b)) return null;
+  let lo=0,hi=0;belief.forEach(b=>{if(b.hi>0){lo+=b.lo+1;hi+=b.hi;}});
+  return {lo,hi};
+}
+function botGrant(s,kind){
+  const bt=beliefTotal(s.belief);
+  if(!bt||bt.hi===0) return s.sr?100:0;
+  return kind==='low'?bt.lo:Math.min(bt.hi,200000);
+}
+function runBot(mode,arr,kind){const s=newGame(mode,arr);while(!s.over) step(s,botGrant(s,kind));return s;}
+if(typeof module!=='undefined') module.exports={B5,B8,quant,makeArrivals,newGame,step,beliefTotal,botGrant,runBot};
+</script>
+
+<script>
+/* ---------- view ---------- */
+const $=id=>document.getElementById(id);
+const fmt=n=>Math.round(n).toLocaleString('en-US');
+const LO=8,Z=4;
+function sx(v,max){if(v<=0)return 0;if(!isFinite(v))return 100;const p=Math.log(v/LO)/Math.log(max/LO);return Z+(100-Z)*Math.min(1,Math.max(0,p));}
+function rangeText(q){
+  if(q.idx===0) return 'empty';
+  if(!isFinite(q.hi)) return 'more than '+fmt(q.lo)+' B';
+  return fmt(q.lo+1)+' to '+fmt(q.hi)+' B';
+}
+function bitsHTML(value,n,cls,label){
+  let h='<span class="field '+cls+'"><span class="bits">';
+  for(let i=n-1;i>=0;i--){const on=(value>>i)&1;h+='<span class="bit'+(on?' on':'')+'">'+on+'</span>';}
+  return h+'</span><small>'+label+'</small></span>';
+}
+function shortOctets(lcg,idx){return bitsHTML(lcg,3,'id','LCG ID '+lcg)+bitsHTML(idx,5,'bs','index '+idx);}
+function longOctets(fields){
+  let map=0;fields.forEach(f=>map|=1<<f.lcg);
+  let h=bitsHTML(map,8,'id','which LCGs follow (7…0)');
+  fields.forEach(f=>{h+=bitsHTML(f.idx,8,'bs','LCG '+f.lcg+' · index '+f.idx);});
+  return h;
+}
+
+/* ----- hero ----- */
+const HMAX=1e6;
+let heroV=1400;
+function heroFromSlider(p){if(p<=0)return 0;const v=5*Math.pow(HMAX/5,(p-1)/999);const m=Math.pow(10,Math.max(0,Math.floor(Math.log10(v))-2));return Math.round(v/m)*m;}
+function heroToSlider(v){if(v<=0)return 0;return Math.round(1+999*Math.log(Math.max(5,v)/5)/Math.log(HMAX/5));}
+function buildLane(el,T,prefix){
+  let h='';
+  for(let i=1;i<T.length;i++){
+    if(T[i-1]>=HMAX)break;
+    const l=sx(T[i-1]||1,HMAX),r=sx(Math.min(T[i],HMAX),HMAX);
+    h+='<div class="bk'+(i%2?' alt':'')+'" id="'+prefix+i+'" style="left:'+l+'%;width:'+(r-l)+'%"></div>';
+  }
+  if(T[T.length-1]<HMAX){const l=sx(T[T.length-1],HMAX);h+='<div class="bk over" id="'+prefix+T.length+'" style="left:'+l+'%;width:'+(100-l)+'%"></div>';}
+  h='<div class="bk" id="'+prefix+'0" style="left:0;width:'+Z+'%"></div>'+h;
+  el.innerHTML=h;
+}
+let hit5=null,hit8=null;
+function blurText(q,v){
+  if(q.idx===0) return 'Index 0 is the one exact value: nothing waiting.';
+  if(!isFinite(q.hi)) return 'Top bucket. The gNB only knows it is a lot. It could be '+fmt(q.lo+1)+' B or a hundred times that.';
+  const w=q.hi-q.lo;
+  return 'Any of '+fmt(w)+' different queue sizes would send this same index.';
+}
+function renderHero(){
+  const v=heroV,q5=quant(v,5),q8=quant(v,8);
+  $('h1n').textContent=fmt(v);
+  if(hit5)hit5.classList.remove('hit');if(hit8)hit8.classList.remove('hit');
+  hit5=$('h5_'+q5.idx);hit8=$('h8_'+q8.idx);
+  if(hit5)hit5.classList.add('hit');if(hit8)hit8.classList.add('hit');
+  $('needle').style.left=(v<=0?Z/2:sx(v,HMAX))+'%';
+  $('oct5').innerHTML=shortOctets(0,q5.idx);
+  $('oct8').innerHTML=longOctets([Object.assign({lcg:0},q8)]);
+  $('says5').innerHTML='gNB hears: <span>'+rangeText(q5)+'</span>';
+  $('says8').innerHTML='gNB hears: <span>'+rangeText(q8)+'</span>';
+  $('blur5').textContent=blurText(q5,v);
+  $('blur8').textContent=blurText(q8,v);
+}
+function setHero(v,from){
+  heroV=Math.max(0,Math.min(HMAX,Math.round(v)||0));
+  if(from!=='r')$('heroR').value=heroToSlider(heroV);
+  if(from!=='n')$('heroN').value=heroV;
+  renderHero();
+}
+
+/* ----- game ----- */
+const GMAX=1e5,N=12;
+let seed=7,mode='split',G=null,grants=[],xray=false,peeked=false,lastRec=null,grantV=100;
+function grantFromSlider(p){if(p<=0)return 0;const v=10*Math.pow(5000,(p-1)/999);return v<100?Math.round(v):v<1000?Math.round(v/5)*5:Math.round(v/50)*50;}
+function grantToSlider(v){if(v<=0)return 0;return Math.round(1+999*Math.log(Math.max(10,Math.min(50000,v))/10)/Math.log(5000));}
+function setGrant(v,from){
+  grantV=Math.max(0,Math.min(200000,Math.round(v)||0));
+  if(from!=='r')$('grantR').value=grantToSlider(grantV);
+  if(from!=='n')$('grantN').value=grantV;
+  $('go').textContent=grantV>0?'Grant '+fmt(grantV)+' B':'Skip this slot';
+  const m=document.querySelector('.col.now .cg');
+  if(m){m.style.bottom=sx(grantV,GMAX)+'%';m.style.display=grantV>0?'':'none';}
+}
+function start(saved){
+  saved=saved||{};
+  if(typeof saved.seed==='number')seed=saved.seed;
+  if(saved.mode==='shared'||saved.mode==='split')mode=saved.mode;
+  xray=!!saved.xray;peeked=!!saved.peeked;
+  if(typeof saved.hero==='number')heroV=saved.hero;
+  G=newGame(mode,makeArrivals(seed,N));grants=[];lastRec=null;
+  (saved.grants||[]).forEach(g=>{if(!G.over){lastRec=step(G,g);grants.push(g);}});
+  setHero(heroV);
+  renderGame(false);suggest();
+}
+function reset(keepSeed){if(!keepSeed)seed=(seed*31+17)%100000;xray=false;peeked=false;G=newGame(mode,makeArrivals(seed,N));grants=[];lastRec=null;renderGame(false);suggest();}
+function suggest(){
+  const bt=beliefTotal(G.belief);
+  setGrant(!bt||bt.hi===0?(G.sr?100:0):Math.min(bt.hi,200000));
+}
+function inRange(v,b){return b.hi===0?v===0:(v>b.lo&&v<=b.hi);}
+function lcgNames(){return mode==='split'?['video call','photo backup']:['call + backup, summed'];}
+
+function coachText(rec){
+  if(!rec){
+    return 'The UE has raised its hand with a Scheduling Request. An SR carries no size, so you know nothing yet. A small probe grant is the cheap way to hear a BSR.';
+  }
+  if(!rec.pdu){
+    return rec.sr?'You skipped while the UE had its hand up. No grant means no PDU, and no PDU means no BSR. You learned nothing.'
+                 :'No grant, so no PDU and no BSR. Whatever you believed is now one slot older.';
+  }
+  const p=rec.pdu,left=rec.after.A+rec.after.B,served=p.sa+p.sb;let s;
+  if(p.pad>0&&served===0) s='Nothing was waiting. All '+fmt(rec.grant)+' B went out as padding.';
+  else if(p.pad>0) s='Only '+fmt(served)+' B were waiting, so '+fmt(p.pad)+' B of your grant went out as padding.';
+  else if(left>0) s='Every granted byte carried data, and '+fmt(left)+' B stayed behind.';
+  else s='Exact fit. Nothing wasted, nothing left behind.';
+  let f;
+  if(p.bsr.format==='long') f=' Two groups had data when the PDU was built, so the report is a Long BSR with fine 8-bit buckets.';
+  else if(mode==='split') f=' Only one group had data, so the report is a Short BSR: 5-bit buckets, and proof the other group was empty.';
+  else f=' One group means a Short BSR every time: coarse 5-bit buckets for the call and the backup added together.';
+  return s+f;
+}
+
+function renderAir(animate){
+  let h='';const rec=lastRec;
+  if(rec&&rec.pdu){
+    const p=rec.pdu,g=rec.grant;
+    h+='<div class="msg'+(animate?' in':'')+'"><span class="dir">↓ GRANT · slot '+(rec.t+1)+'</span><span class="num"><b>'+fmt(g)+' B</b> of uplink payload</span></div>';
+    h+='<div class="msg'+(animate?' in':'')+'"><span class="dir">↑ MAC PDU from the UE</span>'
+      +'<div class="pdu" role="img" aria-label="PDU contents">'
+      +(p.sa?'<i class="a" style="width:'+(100*p.sa/g)+'%"></i>':'')
+      +(p.sb?'<i class="b" style="width:'+(100*p.sb/g)+'%"></i>':'')
+      +(p.pad?'<i class="pad" style="width:'+(100*p.pad/g)+'%"></i>':'')+'</div>'
+      +'<div class="legend num">'
+      +'<span><i class="k" style="background:var(--a)"></i>call '+fmt(p.sa)+'</span>'
+      +'<span><i class="k" style="background:var(--b)"></i>backup '+fmt(p.sb)+'</span>'
+      +'<span><i class="k" style="background:var(--muted)"></i>padding '+fmt(p.pad)+'</span></div>'
+      +'<span class="dir" style="margin-top:6px">+ '+(p.bsr.format==='long'?'LONG':'SHORT')+' BSR inside it</span>'
+      +'<div class="octets">'+(p.bsr.format==='long'?longOctets(p.bsr.fields):shortOctets(p.bsr.fields[0].lcg,p.bsr.fields[0].idx))+'</div>'
+      +'<div class="small">'+p.bsr.fields.map(f=>'LCG '+f.lcg+' still holds: <b class="num">'+rangeText(f)+'</b>').join('<br>')+'</div>'
+      +'</div>';
+  }else if(rec){
+    h+='<div class="msg"><span class="dir">SLOT '+(rec.t+1)+' · NOTHING SENT</span><span>No grant, so the UE stayed silent.</span></div>';
+  }
+  if(G.sr&&!G.over){
+    h+='<div class="msg sr'+(animate?' in':'')+'"><span class="dir">↑ SCHEDULING REQUEST</span><span><b>“I have new data.”</b> One bit of meaning. No byte count.</span></div>';
+  }
+  if(!h) h='<div class="msg"><span class="dir">QUIET</span><span>Nothing new on the air.</span></div>';
+  $('airBody').innerHTML=h;
+  $('coach').textContent=G.over?coachText(rec)+' Round over: the frost is off, compare the dots with your bands below.':coachText(rec);
+}
+
+function renderBeliefs(){
+  const names=lcgNames(),truth=groupsOf(G),show=xray||G.over;let h='';
+  const axis='<div class="baxis">'+[[0,'0'],[10,'10'],[100,'100'],[1000,'1k'],[10000,'10k'],[100000,'100k']].map(a=>'<span style="left:'+sx(a[0],GMAX)+'%">'+a[1]+'</span>').join('')+'</div>';
+  G.belief.forEach((b,i)=>{
+    h+='<div class="belief"><div class="belief-head"><span>LCG '+i+' · '+names[i]+'</span>';
+    if(!b){
+      h+='<b>no report yet</b></div><div class="btrack unknown">';
+    }else{
+      h+='<b>'+rangeText(b)+'</b></div><div class="btrack">';
+      const l=b.hi===0?0:sx(b.lo+1,GMAX),r=b.hi===0?Z*0.6:sx(b.hi,GMAX);
+      h+='<div class="band" style="left:'+l+'%;width:'+Math.max(0,r-l)+'%"></div>';
+    }
+    let verdict='';
+    if(show){
+      const ok=b?inRange(truth[i],b):false;
+      h+='<div class="truth'+(ok?'':' out')+'" style="left:'+(truth[i]<=0?Z*0.3:sx(truth[i],GMAX))+'%"></div>';
+      verdict=b?('<span class="verdict '+(ok?'in':'out')+'">Really '+fmt(truth[i])+' B: '+(ok?'still inside your range':'escaped your range')+'</span>')
+               :'<span class="verdict out">Really '+fmt(truth[i])+' B</span>';
+    }
+    h+='</div>'+axis;
+    let age;
+    if(!b) age=G.sr?'An SR arrived. It says “something”, not how much.':'Nothing heard from this group.';
+    else{
+      const n=G.t-b.t;
+      age=(b.inferred?'Not in the report, so it was empty. ':'')+(G.over?'From the last PDU.':(n<=1?'Heard last slot.':'Heard '+n+' slots ago.')+' Arrivals since then are invisible.');
+    }
+    h+='<span class="age">'+age+'</span>'+verdict+'</div>';
+  });
+  const bt=beliefTotal(G.belief);
+  h+='<div class="total"><span>Total you believe is waiting</span><b>'+(bt?(bt.hi===0?'0 B':(isFinite(bt.hi)?fmt(bt.lo)+' to '+fmt(bt.hi)+' B':'more than '+fmt(bt.lo)+' B')):'unknown')+'</b></div>';
+  $('beliefs').innerHTML=h;
+  $('gLow').disabled=!bt||bt.hi===0;$('gHigh').disabled=!bt||bt.hi===0;
+  $('gLow').textContent=bt&&bt.hi>0?'Low end · '+fmt(bt.lo)+' B':'Low end';
+  $('gHigh').textContent=bt&&bt.hi>0&&isFinite(bt.hi)?'High end · '+fmt(bt.hi)+' B':'High end';
+}
+
+function renderTimeline(){
+  let h='';const show=xray||G.over;
+  for(let t=0;t<N;t++){
+    const rec=G.log[t],now=!G.over&&t===G.t;
+    h+='<div class="col'+(now?' now':'')+'">';
+    if(rec||now){
+      const bel=rec?rec.beliefBefore:G.belief,bt=beliefTotal(bel);
+      const tr=rec?rec.before.A+rec.before.B:G.A+G.B;
+      if(!bt) h+='<div class="cb unknown"></div>';
+      else{const l=bt.hi===0?0:sx(bt.lo,GMAX),r=bt.hi===0?1:sx(bt.hi,GMAX);h+='<div class="cb" style="bottom:'+l+'%;height:'+Math.max(0,r-l)+'%"></div>';}
+      if(rec){if(rec.grant>0)h+='<div class="cg" style="bottom:'+sx(rec.grant,GMAX)+'%"></div>';}
+      else h+='<div class="cg" style="bottom:'+sx(grantV,GMAX)+'%'+(grantV>0?'':';display:none')+'"></div>';
+      if(show){const ok=bt?(bt.hi===0?tr===0:(tr>=bt.lo&&tr<=bt.hi)):false;h+='<div class="ct'+(ok?'':' out')+'" style="bottom:'+sx(tr,GMAX)+'%" title="'+fmt(tr)+' B waiting"></div>';}
+    }
+    h+='</div>';
+  }
+  $('tlCols').innerHTML=h;
+  $('tlHint').hidden=show;
+}
+
+function renderResults(){
+  const arr=G.arr,other=mode==='split'?'shared':'split';
+  const rows=[
+    ['You'+(peeked?' (with X-ray)':''),G,true],
+    ['Bot: always grants the low end',runBot(mode,arr,'low')],
+    ['Bot: always grants the high end',runBot(mode,arr,'high')],
+    ['High-end bot, '+(other==='shared'?'one shared group':'two groups'),runBot(other,arr,'high')]
+  ];
+  let h='<h3>Round over</h3><p class="small muted" style="margin:0 0 10px">Same traffic for everyone. Lower is better. Someone who could see the queue would score 0 and 0.</p><div class="tablebox"><table><thead><tr><th>Scheduler</th><th>Padding</th><th>Waiting</th><th>Total</th></tr></thead><tbody>';
+  rows.forEach(r=>{h+='<tr'+(r[2]?' class="me"':'')+'><td>'+r[0]+'</td><td>'+fmt(r[1].waste)+'</td><td>'+fmt(r[1].wait)+'</td><td>'+fmt(r[1].waste+r[1].wait)+'</td></tr>';});
+  h+='</tbody></table></div>';
+  const hi=rows[2][1],hiO=rows[3][1];
+  const d=(hi.waste)-(hiO.waste);
+  h+='<p class="small" style="margin:12px 0">'+(d!==0?'The high-end bot pads '+fmt(Math.abs(d))+' B '+(d<0?'less':'more')+' with '+(mode==='split'?'two groups':'one shared group')+' than with '+(other==='split'?'two groups':'one shared group')+'. Separate groups unlock the Long BSR and its finer buckets.':'On this traffic the grouping made no difference to the high-end bot.')+'</p>';
+  h+='<div class="chips"><button class="chip" id="rAgain">Replay this traffic</button><button class="chip" id="rNew">New traffic</button><button class="chip" id="rOther">Try '+(other==='shared'?'one shared group':'two groups')+'</button></div>';
+  const el=$('results');el.innerHTML=h;
+  $('rAgain').onclick=()=>reset(true);
+  $('rNew').onclick=()=>reset(false);
+  $('rOther').onclick=()=>{mode=other;reset(true);};
+}
+
+function renderGame(animate){
+  $('sSlot').textContent=Math.min(G.t+1,N)+' / '+N;
+  $('sWaste').textContent=fmt(G.waste)+' B';
+  $('sWait').textContent=fmt(G.wait)+' B';
+  $('mSplit').setAttribute('aria-pressed',mode==='split');$('mShared').setAttribute('aria-pressed',mode==='shared');
+  $('lcgB').textContent=mode==='split'?'LCG 1':'LCG 0';
+  const show=xray||G.over;
+  $('uePanel').classList.toggle('frost',!show);
+  document.querySelectorAll('#uePanel .secret').forEach(e=>e.setAttribute('aria-hidden',!show));
+  $('ueA').textContent=fmt(G.A);$('ueB').textContent=fmt(G.B);
+  $('ueAbar').style.width=sx(G.A,GMAX)+'%';$('ueBbar').style.width=sx(G.B,GMAX)+'%';
+  $('frostNote').textContent=show?(G.over?'Round over. This is what was really in there.':'X-ray on. A real gNB never gets this view.'):'Frosted on purpose. The gNB cannot see in here.';
+  $('xray').setAttribute('aria-pressed',xray);$('xray').textContent=xray?'Frost it again':'X-ray the UE';
+  $('xray').hidden=G.over;
+  renderAir(animate);renderBeliefs();renderTimeline();
+  $('ctl').hidden=G.over;$('results').hidden=!G.over;
+  if(G.over)renderResults();
+}
+function play(){
+  if(G.over)return;
+  lastRec=step(G,grantV);grants.push(grantV);
+  renderGame(true);if(!G.over)suggest();
+}
+
+/* ----- wiring ----- */
+buildLane($('lane5'),B5,'h5_');buildLane($('lane8'),B8,'h8_');
+$('heroAxis').innerHTML=[[0,'0'],[10,'10'],[100,'100'],[1000,'1k'],[10000,'10k'],[100000,'100k'],[1000000,'1M bytes']].map(a=>'<span style="left:'+sx(a[0],HMAX)+'%">'+a[1]+'</span>').join('');
+$('tlGrid').innerHTML=[[10,'10'],[100,'100'],[1000,'1k'],[10000,'10k'],[100000,'100k']].map(a=>'<i style="bottom:'+sx(a[0],GMAX)+'%"></i><span style="bottom:'+sx(a[0],GMAX)+'%">'+a[1]+'</span>').join('');
+$('tlX').innerHTML=Array.from({length:N},(_,i)=>'<span>'+(i+1)+'</span>').join('');
+$('heroR').addEventListener('input',e=>setHero(heroFromSlider(+e.target.value),'r'));
+$('heroN').addEventListener('input',e=>setHero(+e.target.value,'n'));
+document.querySelectorAll('[data-hero]').forEach(b=>b.addEventListener('click',()=>setHero(+b.dataset.hero)));
+$('grantR').addEventListener('input',e=>setGrant(grantFromSlider(+e.target.value),'r'));
+$('grantN').addEventListener('input',e=>setGrant(+e.target.value,'n'));
+$('grantN').addEventListener('keydown',e=>{if(e.key==='Enter')play();});
+$('gSkip').onclick=()=>setGrant(0);
+$('gProbe').onclick=()=>setGrant(100);
+$('gLow').onclick=()=>{const bt=beliefTotal(G.belief);if(bt)setGrant(bt.lo);};
+$('gHigh').onclick=()=>{const bt=beliefTotal(G.belief);if(bt)setGrant(Math.min(bt.hi,200000));};
+$('go').onclick=play;
+$('xray').onclick=()=>{xray=!xray;if(xray)peeked=true;renderGame(false);};
+$('restart').onclick=()=>reset(true);
+$('mSplit').onclick=()=>{if(mode!=='split'){mode='split';reset(true);}};
+$('mShared').onclick=()=>{if(mode!=='shared'){mode='shared';reset(true);}};
+
+const hot=window.claude&&window.claude.hot;
+if(hot&&hot.snapshot)hot.snapshot(()=>({seed,mode,grants,xray,peeked,hero:heroV}));
+if(hot&&hot.ready)hot.ready(start);else start((hot&&hot.data)||{});
+</script>
+</body>
+</html>
